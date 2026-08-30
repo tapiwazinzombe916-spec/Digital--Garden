@@ -165,6 +165,11 @@ a{ color:inherit; text-decoration:none; }
   margin-bottom:16px;
 }
 .amount-modal-actions{ display:flex; gap:10px; margin-top:4px; }
+.ecocash-toggle{
+  display:flex; align-items:center; gap:8px;
+  font-size:13px; color:var(--ink-soft); margin:4px 0 14px;
+}
+.ecocash-toggle input{ width:16px; height:16px; }
 .create-form .field:first-child{ margin-top:16px; }
 .create-form[hidden]{ display:none; }
 
@@ -652,7 +657,18 @@ a{ color:inherit; text-decoration:none; }
           <label for="amountInput">Amount (USD)</label>
           <input type="number" id="amountInput" min="1" step="0.01" placeholder="0.00">
         </div>
+
+        <div class="field" id="ecocashPhoneField" hidden>
+          <label for="ecocashPhone">EcoCash number</label>
+          <input type="tel" id="ecocashPhone" placeholder="0771234567">
+        </div>
+        <label class="ecocash-toggle" id="ecocashToggleRow" hidden>
+          <input type="checkbox" id="ecocashToggle">
+          <span>Pay with EcoCash</span>
+        </label>
+
         <p class="auth-error" id="amountError" hidden></p>
+        <p class="verify-note" id="ecocashInstructions" hidden></p>
         <div class="amount-modal-actions">
           <button class="pill" id="amountCancelBtn">Cancel</button>
           <button class="pill pill--primary" id="amountConfirmBtn">Confirm</button>
@@ -1214,8 +1230,14 @@ const amountModal = document.getElementById('amountModal');
 const amountModalTitle = document.getElementById('amountModalTitle');
 const amountInput = document.getElementById('amountInput');
 const amountError = document.getElementById('amountError');
+const ecocashToggleRow = document.getElementById('ecocashToggleRow');
+const ecocashToggle = document.getElementById('ecocashToggle');
+const ecocashPhoneField = document.getElementById('ecocashPhoneField');
+const ecocashPhone = document.getElementById('ecocashPhone');
+const ecocashInstructions = document.getElementById('ecocashInstructions');
 let pendingTxKind = 'buy';
 let pendingStoreId = null;
+let ecocashPollTimer = null;
 
 function openAmountModal(kind, storeId){
   pendingTxKind = kind;
@@ -1223,13 +1245,84 @@ function openAmountModal(kind, storeId){
   amountModalTitle.textContent = kind === 'deposit' ? 'Invest' : kind === 'buy' ? 'Buy shares' : 'Withdraw';
   amountInput.value = '';
   amountError.hidden = true;
+  ecocashInstructions.hidden = true;
+  ecocashToggle.checked = false;
+  ecocashPhoneField.hidden = true;
+  // EcoCash only makes sense for money coming IN (Invest / Buy), not withdrawals.
+  ecocashToggleRow.hidden = (kind === 'withdraw');
   amountModal.hidden = false;
   amountInput.focus();
 }
 
+ecocashToggle.addEventListener('change', () => {
+  ecocashPhoneField.hidden = !ecocashToggle.checked;
+});
+
 document.getElementById('investBtn').addEventListener('click', () => openAmountModal('deposit'));
 document.getElementById('withdrawBtn').addEventListener('click', () => openAmountModal('withdraw'));
-document.getElementById('amountCancelBtn').addEventListener('click', () => { amountModal.hidden = true; });
+document.getElementById('amountCancelBtn').addEventListener('click', () => {
+  amountModal.hidden = true;
+  if(ecocashPollTimer) clearInterval(ecocashPollTimer);
+});
+
+async function payWithEcocash(amt){
+  const phone = ecocashPhone.value.trim();
+  if(!phone){
+    amountError.textContent = 'Enter the EcoCash number to charge.';
+    amountError.hidden = false;
+    return;
+  }
+  const confirmBtn = document.getElementById('amountConfirmBtn');
+  confirmBtn.disabled = true;
+
+  try{
+    const { data: { session } } = await client.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/paynow-initiate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ amount: amt, phone }),
+    });
+    const result = await res.json();
+
+    if(!res.ok || !result.success){
+      amountError.textContent = result.error || 'EcoCash payment could not be started.';
+      amountError.hidden = false;
+      confirmBtn.disabled = false;
+      return;
+    }
+
+    ecocashInstructions.hidden = false;
+    ecocashInstructions.textContent = result.instructions || 'Check your phone and enter your EcoCash PIN to approve the payment.';
+
+    // Poll our own table (not Paynow directly) to see when the webhook
+    // confirms payment — the transactions realtime subscription will
+    // pick up the actual chart update on its own once that happens.
+    const reference = result.reference;
+    let attempts = 0;
+    ecocashPollTimer = setInterval(async () => {
+      attempts++;
+      const { data } = await client.from('paynow_payments').select('status').eq('reference', reference).single();
+      if(data?.status === 'paid'){
+        clearInterval(ecocashPollTimer);
+        amountModal.hidden = true;
+        confirmBtn.disabled = false;
+      } else if(data?.status === 'failed' || attempts > 40){ // ~2 min at 3s intervals
+        clearInterval(ecocashPollTimer);
+        amountError.textContent = data?.status === 'failed' ? 'Payment failed or was cancelled.' : 'Still waiting on confirmation — check back shortly.';
+        amountError.hidden = false;
+        confirmBtn.disabled = false;
+      }
+    }, 3000);
+
+  }catch(e){
+    amountError.textContent = 'Could not reach the payment service — try again.';
+    amountError.hidden = false;
+    confirmBtn.disabled = false;
+  }
+}
 
 document.getElementById('amountConfirmBtn').addEventListener('click', async () => {
   const amt = parseFloat(amountInput.value);
@@ -1249,6 +1342,13 @@ document.getElementById('amountConfirmBtn').addEventListener('click', async () =
   if(!isConfigured || !currentUserId){
     amountError.textContent = 'Backend not connected — nothing to record yet.';
     amountError.hidden = false;
+    return;
+  }
+
+  // EcoCash path — real money movement, goes through the Edge Function,
+  // not a direct table insert (a browser insert here could never be trusted).
+  if(ecocashToggle.checked && !ecocashToggleRow.hidden){
+    await payWithEcocash(amt);
     return;
   }
 
