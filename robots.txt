@@ -2,4 +2,4 @@ User-agent: *
 Allow: /index.html
 Disallow: /app.html
 
-Sitemap: https://soft-resonance-e9d0.tapiwazinzombe916.workers.dev/sitemap.xml
+Sitemap: https://digital--garden.tapiwazinzombe916.workers.dev/sitemap.xml
