@@ -273,6 +273,26 @@ a{ color:inherit; text-decoration:none; }
 .post-time{ font-size:11px; color:var(--ink-soft); }
 .post-body{ font-size:14px; line-height:1.5; color:var(--ink); }
 
+.post-actions{ display:flex; gap:16px; margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
+.post-action{
+  display:flex; align-items:center; gap:5px;
+  font-size:12px; font-weight:600; color:var(--ink-soft);
+}
+.post-action--active{ color:var(--clay); }
+.comments-thread{ margin-top:10px; }
+.comments-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+.comment{ font-size:13px; line-height:1.4; }
+.comment-author{ font-weight:600; margin-right:4px; }
+.comment-empty{ font-size:12px; color:var(--ink-soft); }
+.comment-form{ display:flex; gap:8px; }
+.comment-form input{
+  flex:1; padding:9px 12px; border:1px solid var(--line); border-radius:100px;
+  background:var(--paper); font-family:var(--font-body); font-size:13px; color:var(--ink);
+}
+.comment-form button{
+  font-size:12px; font-weight:600; color:var(--canopy); padding:0 8px;
+}
+
 /* ============ Offline banner ============ */
 .offline-banner{
   text-align:center;
@@ -839,7 +859,6 @@ function timeAgo(dateStr){
   if(diff < 86400) return Math.floor(diff/3600) + 'h ago';
   return Math.floor(diff/86400) + 'd ago';
 }
-
 // In-memory cache of the last rendered stores/tasks so the store-detail
 // modal and task action buttons can look up full records by id without
 // a network round trip.
@@ -885,16 +904,41 @@ function renderTasks(tasks){
 }
 
 function renderPosts(posts){
-  document.getElementById('postList').innerHTML = posts.map(p => `
-    <div class="post">
+  document.getElementById('postList').innerHTML = posts.map(p => postHtml(p)).join('');
+}
+
+function postHtml(p){
+  const liked = likedPostIds.has(p.id);
+  return `
+    <div class="post" data-post-id="${p.id || ''}">
       <div class="post-head">
         <span class="ring ring--verified"><span class="avatar">${initials(p.name)}</span></span>
         <div><p class="post-name">${p.name}</p><p class="post-time">${p.time}</p></div>
       </div>
       <p class="post-body">${p.body}</p>
+      ${p.id ? `
+      <div class="post-actions">
+        <button class="post-action ${liked ? 'post-action--active' : ''}" data-like-post="${p.id}">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="${liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
+          <span class="like-count">${p.likeCount || 0}</span>
+        </button>
+        <button class="post-action" data-toggle-comments="${p.id}">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-4-1L3 20l1-4.5A8.38 8.38 0 0 1 12.5 3 8.5 8.5 0 0 1 21 11.5z"/></svg>
+          <span class="comment-count">${p.commentCount || 0}</span>
+        </button>
+      </div>
+      <div class="comments-thread" id="comments-${p.id}" hidden>
+        <div class="comments-list" id="commentsList-${p.id}"></div>
+        <form class="comment-form" data-comment-form="${p.id}">
+          <input type="text" placeholder="Write a comment…" required>
+          <button type="submit">Post</button>
+        </form>
+      </div>
+      ` : ''}
     </div>
-  `).join('');
+  `;
 }
+
 function renderFeed(data){
   renderStores(data.stores);
   renderTasks(data.tasks);
@@ -902,6 +946,8 @@ function renderFeed(data){
 }
 
 // ---- Data loading: real Supabase queries, mapped into the same shape the UI expects ----
+let likedPostIds = new Set();
+
 async function loadFeed(limitOverride){
   const n = limitOverride || 10;
   if(!isConfigured || !navigator.onLine){
@@ -913,13 +959,21 @@ async function loadFeed(limitOverride){
     const [storesRes, tasksRes, postsRes] = await Promise.all([
       client.from('stores').select('id, name, category, price_label, verification_status').order('created_at', { ascending: false }).limit(n),
       client.from('tasks').select('id, title, location_label, pay_amount, status, claimed_by').order('created_at', { ascending: false }).limit(n),
-      client.from('posts').select('body, created_at, profiles(full_name)').order('created_at', { ascending: false }).limit(n),
+      client.from('posts').select('id, body, created_at, author_id, profiles(full_name), post_likes(count), post_comments(count)').order('created_at', { ascending: false }).limit(n),
     ]);
+
+    if(currentUserId){
+      const { data: myLikes } = await client.from('post_likes').select('post_id').eq('user_id', currentUserId);
+      likedPostIds = new Set((myLikes || []).map(l => l.post_id));
+    }
 
     const data = {
       stores: (storesRes.data || []).map(s => ({ id: s.id, name: s.name, cat: s.category, price: s.price_label, verified: s.verification_status })),
       tasks: (tasksRes.data || []).map(t => ({ id: t.id, title: t.title, loc: t.location_label, pay: `$${t.pay_amount}`, status: t.status, claimed_by: t.claimed_by })),
-      posts: (postsRes.data || []).map(p => ({ name: p.profiles?.full_name || 'Gardener', time: timeAgo(p.created_at), body: p.body })),
+      posts: (postsRes.data || []).map(p => ({
+        id: p.id, name: p.profiles?.full_name || 'Gardener', time: timeAgo(p.created_at), body: p.body,
+        likeCount: p.post_likes?.[0]?.count || 0, commentCount: p.post_comments?.[0]?.count || 0,
+      })),
     };
 
     if(!data.stores.length && !data.tasks.length && !data.posts.length){
@@ -932,6 +986,110 @@ async function loadFeed(limitOverride){
     const cached = localStorage.getItem(STORAGE_KEY);
     renderFeed(cached ? JSON.parse(cached) : sampleData);
   }
+}
+
+// ============================================================
+// Social feed — likes, comments, and live updates (Realtime)
+// ============================================================
+document.getElementById('postList').addEventListener('click', async (e) => {
+  const likeBtn = e.target.closest('[data-like-post]');
+  const commentToggle = e.target.closest('[data-toggle-comments]');
+
+  if(likeBtn){
+    if(!isConfigured || !currentUserId) return;
+    const postId = likeBtn.dataset.likePost;
+    const alreadyLiked = likedPostIds.has(postId);
+    const countEl = likeBtn.querySelector('.like-count');
+    likeBtn.disabled = true;
+
+    // Optimistic UI — updates instantly, corrected if the request fails.
+    if(alreadyLiked){
+      likedPostIds.delete(postId);
+      likeBtn.classList.remove('post-action--active');
+      countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
+      await client.from('post_likes').delete().eq('post_id', postId).eq('user_id', currentUserId);
+    } else {
+      likedPostIds.add(postId);
+      likeBtn.classList.add('post-action--active');
+      countEl.textContent = parseInt(countEl.textContent) + 1;
+      await client.from('post_likes').insert({ post_id: postId, user_id: currentUserId });
+    }
+    likeBtn.disabled = false;
+  }
+
+  if(commentToggle){
+    const postId = commentToggle.dataset.toggleComments;
+    const thread = document.getElementById(`comments-${postId}`);
+    const wasHidden = thread.hidden;
+    thread.hidden = !wasHidden;
+    if(wasHidden){
+      const { data } = await client.from('post_comments').select('body, created_at, profiles(full_name)').eq('post_id', postId).order('created_at', { ascending: true });
+      document.getElementById(`commentsList-${postId}`).innerHTML = (data || []).map(c => `
+        <div class="comment"><span class="comment-author">${c.profiles?.full_name || 'Gardener'}</span> ${c.body}</div>
+      `).join('') || `<p class="comment-empty">No comments yet — be the first.</p>`;
+    }
+  }
+});
+
+document.getElementById('postList').addEventListener('submit', async (e) => {
+  const form = e.target.closest('[data-comment-form]');
+  if(!form) return;
+  e.preventDefault();
+  if(!isConfigured || !currentUserId) return;
+  const postId = form.dataset.commentForm;
+  const input = form.querySelector('input');
+  const body = input.value.trim();
+  if(!body) return;
+  input.disabled = true;
+  await client.from('post_comments').insert({ post_id: postId, author_id: currentUserId, body });
+  input.value = '';
+  input.disabled = false;
+  // Realtime subscription below will append it live — no manual re-fetch needed.
+});
+
+let communityChannel = null;
+
+function initCommunityRealtime(){
+  if(!isConfigured) return;
+  if(communityChannel) client.removeChannel(communityChannel);
+
+  communityChannel = client.channel('community-feed')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, async (payload) => {
+      const { data: profile } = await client.from('profiles').select('full_name').eq('id', payload.new.author_id).single();
+      const newPost = {
+        id: payload.new.id, name: profile?.full_name || 'Gardener', time: 'just now',
+        body: payload.new.body, likeCount: 0, commentCount: 0,
+      };
+      document.getElementById('postList').insertAdjacentHTML('afterbegin', postHtml(newPost));
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'post_likes' }, (payload) => {
+      const postEl = document.querySelector(`[data-post-id="${payload.new.post_id}"]`);
+      if(postEl){
+        const countEl = postEl.querySelector('.like-count');
+        if(countEl && payload.new.user_id !== currentUserId) countEl.textContent = parseInt(countEl.textContent) + 1;
+      }
+    })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'post_likes' }, (payload) => {
+      const postEl = document.querySelector(`[data-post-id="${payload.old.post_id}"]`);
+      if(postEl){
+        const countEl = postEl.querySelector('.like-count');
+        if(countEl && payload.old.user_id !== currentUserId) countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
+      }
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'post_comments' }, (payload) => {
+      const postEl = document.querySelector(`[data-post-id="${payload.new.post_id}"]`);
+      if(!postEl) return;
+      const countEl = postEl.querySelector('.comment-count');
+      if(countEl) countEl.textContent = parseInt(countEl.textContent) + 1;
+      const thread = document.getElementById(`comments-${payload.new.post_id}`);
+      if(thread && !thread.hidden){
+        client.from('profiles').select('full_name').eq('id', payload.new.author_id).single().then(({ data: profile }) => {
+          document.getElementById(`commentsList-${payload.new.post_id}`).insertAdjacentHTML('beforeend',
+            `<div class="comment"><span class="comment-author">${profile?.full_name || 'Gardener'}</span> ${payload.new.body}</div>`);
+        });
+      }
+    })
+    .subscribe();
 }
 
 function updateOfflineBanner(){
@@ -1101,10 +1259,12 @@ async function showApp(){
   loadFeed();
   loadProfile();
   initPortfolio();
+  initCommunityRealtime();
 }
 function showAuth(){
   authScreen.hidden = false;
   appRoot.hidden = true;
+  if(communityChannel){ client.removeChannel(communityChannel); communityChannel = null; }
   if(portfolioChannel){ client.removeChannel(portfolioChannel); portfolioChannel = null; }
 }
 
