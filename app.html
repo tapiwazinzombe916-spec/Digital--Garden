@@ -399,9 +399,11 @@ a{ color:inherit; text-decoration:none; }
 .profile-status{
   font-family:var(--font-mono); font-size:10px; font-weight:600;
   text-transform:uppercase; letter-spacing:0.06em;
-  color:var(--canopy); background:var(--mist);
   padding:4px 10px; border-radius:100px; margin-top:10px;
+  color:var(--ink-soft); background:var(--mist);
 }
+.profile-status--verified{ color:var(--canopy); background:rgba(47,107,79,0.14); }
+.profile-status--pending{ color:var(--harvest); background:rgba(201,138,46,0.16); }
 
 .verify-block{
   width:100%; margin-top:16px; padding-top:16px;
@@ -481,6 +483,14 @@ a{ color:inherit; text-decoration:none; }
 }
 .action-title{ font-size:13px; font-weight:600; color:var(--ink); }
 .action-sub{ font-size:11px; color:var(--ink-soft); }
+
+.pill-row{ display:flex; gap:12px; margin-bottom:8px; }
+.pill-row .pill{ padding:13px 0; }
+
+.calc-result{
+  font-family:var(--font-mono); font-size:15px; font-weight:600;
+  color:var(--canopy); margin-top:6px;
+}
 
 @media (min-width:600px){
   .feed{ padding-top:24px; }
@@ -578,6 +588,11 @@ a{ color:inherit; text-decoration:none; }
           <span class="action-title">Micro-tasks</span>
         </button>
       </section>
+
+      <div class="pill-row">
+        <button class="pill" data-action="dashboard">Dashboard</button>
+        <button class="pill" data-action="tools">Tools</button>
+      </div>
     </section>
 
     <!-- ============ MARKET (also the Search destination) ============ -->
@@ -634,6 +649,35 @@ a{ color:inherit; text-decoration:none; }
           <button class="pill pill--primary" id="investBtn">Invest</button>
           <button class="pill" id="withdrawBtn">Withdraw</button>
         </div>
+      </section>
+    </section>
+
+    <!-- ============ NEWS ============ -->
+    <section class="page" id="page-news">
+      <div class="page-header">
+        <button class="page-back" data-back aria-label="Back">←</button>
+        <h1>News</h1>
+      </div>
+      <div class="post-list" id="newsList"><!-- injected by app.js --></div>
+    </section>
+
+    <!-- ============ TOOLS ============ -->
+    <section class="page" id="page-tools">
+      <div class="page-header">
+        <button class="page-back" data-back aria-label="Back">←</button>
+        <h1>Tools</h1>
+      </div>
+      <section class="card">
+        <p class="verify-heading">Share calculator</p>
+        <div class="field">
+          <label for="calcAmount">Amount to invest (USD)</label>
+          <input type="number" id="calcAmount" min="0" step="0.01" placeholder="50.00">
+        </div>
+        <div class="field">
+          <label for="calcPrice">Price per share (USD)</label>
+          <input type="number" id="calcPrice" min="0.01" step="0.01" placeholder="1.20">
+        </div>
+        <p class="calc-result" id="calcResult">Enter both fields to see estimated shares.</p>
       </section>
     </section>
 
@@ -792,9 +836,12 @@ a{ color:inherit; text-decoration:none; }
     <button class="tab" data-tab="performance" aria-label="Performance">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>
     </button>
+    <button class="tab" data-tab="news" aria-label="News">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h13a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4z"/><path d="M4 4v16"/><path d="M8 9h7M8 13h7M8 17h4"/></svg>
+    </button>
     <button class="tab" data-tab="profile" aria-label="Profile">
-      <span class="ring ring--verified">
-        <span class="avatar">T</span>
+      <span class="ring ring--verified" id="navProfileRing">
+        <span class="avatar" id="navProfileInitials">T</span>
       </span>
     </button>
   </nav>
@@ -850,6 +897,11 @@ function ringClass(status){
   if(status === 'pending') return 'ring ring--pending';
   return 'ring';
 }
+function statusBadgeClass(status){
+  if(status === 'verified') return 'profile-status profile-status--verified';
+  if(status === 'pending') return 'profile-status profile-status--pending';
+  return 'profile-status';
+}
 function initials(name){
   return (name || '?').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
 }
@@ -904,15 +956,16 @@ function renderTasks(tasks){
 }
 
 function renderPosts(posts){
-  document.getElementById('postList').innerHTML = posts.map(p => postHtml(p)).join('');
+  document.getElementById('postList').innerHTML = posts.map(p => postHtml(p, 'feed')).join('');
 }
 
-function postHtml(p){
+function postHtml(p, prefix){
+  prefix = prefix || 'feed';
   const liked = likedPostIds.has(p.id);
   return `
     <div class="post" data-post-id="${p.id || ''}">
       <div class="post-head">
-        <span class="ring ring--verified"><span class="avatar">${initials(p.name)}</span></span>
+        <span class="${ringClass(p.authorStatus)}"><span class="avatar">${initials(p.name)}</span></span>
         <div><p class="post-name">${p.name}</p><p class="post-time">${p.time}</p></div>
       </div>
       <p class="post-body">${p.body}</p>
@@ -922,14 +975,14 @@ function postHtml(p){
           <svg width="17" height="17" viewBox="0 0 24 24" fill="${liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>
           <span class="like-count">${p.likeCount || 0}</span>
         </button>
-        <button class="post-action" data-toggle-comments="${p.id}">
+        <button class="post-action" data-toggle-comments="${prefix}:${p.id}">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-4-1L3 20l1-4.5A8.38 8.38 0 0 1 12.5 3 8.5 8.5 0 0 1 21 11.5z"/></svg>
           <span class="comment-count">${p.commentCount || 0}</span>
         </button>
       </div>
-      <div class="comments-thread" id="comments-${p.id}" hidden>
-        <div class="comments-list" id="commentsList-${p.id}"></div>
-        <form class="comment-form" data-comment-form="${p.id}">
+      <div class="comments-thread" id="comments-${prefix}-${p.id}" hidden>
+        <div class="comments-list" id="commentsList-${prefix}-${p.id}"></div>
+        <form class="comment-form" data-comment-form="${prefix}:${p.id}">
           <input type="text" placeholder="Write a comment…" required>
           <button type="submit">Post</button>
         </form>
@@ -959,7 +1012,7 @@ async function loadFeed(limitOverride){
     const [storesRes, tasksRes, postsRes] = await Promise.all([
       client.from('stores').select('id, name, category, price_label, verification_status').order('created_at', { ascending: false }).limit(n),
       client.from('tasks').select('id, title, location_label, pay_amount, status, claimed_by').order('created_at', { ascending: false }).limit(n),
-      client.from('posts').select('id, body, created_at, author_id, profiles(full_name), post_likes(count), post_comments(count)').order('created_at', { ascending: false }).limit(n),
+      client.from('posts').select('id, body, created_at, author_id, profiles(full_name, verification_status), post_likes(count), post_comments(count)').order('created_at', { ascending: false }).limit(n),
     ]);
 
     if(currentUserId){
@@ -971,7 +1024,8 @@ async function loadFeed(limitOverride){
       stores: (storesRes.data || []).map(s => ({ id: s.id, name: s.name, cat: s.category, price: s.price_label, verified: s.verification_status })),
       tasks: (tasksRes.data || []).map(t => ({ id: t.id, title: t.title, loc: t.location_label, pay: `$${t.pay_amount}`, status: t.status, claimed_by: t.claimed_by })),
       posts: (postsRes.data || []).map(p => ({
-        id: p.id, name: p.profiles?.full_name || 'Gardener', time: timeAgo(p.created_at), body: p.body,
+        id: p.id, name: p.profiles?.full_name || 'Gardener', authorStatus: p.profiles?.verification_status || 'unverified',
+        time: timeAgo(p.created_at), body: p.body,
         likeCount: p.post_likes?.[0]?.count || 0, commentCount: p.post_comments?.[0]?.count || 0,
       })),
     };
@@ -988,10 +1042,45 @@ async function loadFeed(limitOverride){
   }
 }
 
+// ---- News: same posts infrastructure, filtered to admin-authored updates ----
+let newsLoaded = false;
+async function loadNews(){
+  const list = document.getElementById('newsList');
+  if(!isConfigured){
+    list.innerHTML = `<p class="comment-empty">Connect the backend to see news.</p>`;
+    return;
+  }
+  try{
+    const { data } = await client
+      .from('posts')
+      .select('id, body, created_at, author_id, profiles!inner(full_name, verification_status, is_admin), post_likes(count), post_comments(count)')
+      .eq('profiles.is_admin', true)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if(currentUserId){
+      const { data: myLikes } = await client.from('post_likes').select('post_id').eq('user_id', currentUserId);
+      likedPostIds = new Set([...likedPostIds, ...(myLikes || []).map(l => l.post_id)]);
+    }
+
+    const news = (data || []).map(p => ({
+      id: p.id, name: p.profiles?.full_name || 'Digital Garden Team', authorStatus: p.profiles?.verification_status || 'verified',
+      time: timeAgo(p.created_at), body: p.body,
+      likeCount: p.post_likes?.[0]?.count || 0, commentCount: p.post_comments?.[0]?.count || 0,
+    }));
+    list.innerHTML = news.length
+      ? news.map(p => postHtml(p, 'news')).join('')
+      : `<p class="comment-empty">No official updates yet.</p>`;
+    newsLoaded = true;
+  }catch(e){
+    list.innerHTML = `<p class="comment-empty">Couldn't load news right now.</p>`;
+  }
+}
+
 // ============================================================
 // Social feed — likes, comments, and live updates (Realtime)
 // ============================================================
-document.getElementById('postList').addEventListener('click', async (e) => {
+document.body.addEventListener('click', async (e) => {
   const likeBtn = e.target.closest('[data-like-post]');
   const commentToggle = e.target.closest('[data-toggle-comments]');
 
@@ -1018,25 +1107,25 @@ document.getElementById('postList').addEventListener('click', async (e) => {
   }
 
   if(commentToggle){
-    const postId = commentToggle.dataset.toggleComments;
-    const thread = document.getElementById(`comments-${postId}`);
+    const [prefix, postId] = commentToggle.dataset.toggleComments.split(':');
+    const thread = document.getElementById(`comments-${prefix}-${postId}`);
     const wasHidden = thread.hidden;
     thread.hidden = !wasHidden;
     if(wasHidden){
       const { data } = await client.from('post_comments').select('body, created_at, profiles(full_name)').eq('post_id', postId).order('created_at', { ascending: true });
-      document.getElementById(`commentsList-${postId}`).innerHTML = (data || []).map(c => `
+      document.getElementById(`commentsList-${prefix}-${postId}`).innerHTML = (data || []).map(c => `
         <div class="comment"><span class="comment-author">${c.profiles?.full_name || 'Gardener'}</span> ${c.body}</div>
       `).join('') || `<p class="comment-empty">No comments yet — be the first.</p>`;
     }
   }
 });
 
-document.getElementById('postList').addEventListener('submit', async (e) => {
+document.body.addEventListener('submit', async (e) => {
   const form = e.target.closest('[data-comment-form]');
   if(!form) return;
   e.preventDefault();
   if(!isConfigured || !currentUserId) return;
-  const postId = form.dataset.commentForm;
+  const [, postId] = form.dataset.commentForm.split(':');
   const input = form.querySelector('input');
   const body = input.value.trim();
   if(!body) return;
@@ -1055,10 +1144,10 @@ function initCommunityRealtime(){
 
   communityChannel = client.channel('community-feed')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, async (payload) => {
-      const { data: profile } = await client.from('profiles').select('full_name').eq('id', payload.new.author_id).single();
+      const { data: profile } = await client.from('profiles').select('full_name, verification_status').eq('id', payload.new.author_id).single();
       const newPost = {
-        id: payload.new.id, name: profile?.full_name || 'Gardener', time: 'just now',
-        body: payload.new.body, likeCount: 0, commentCount: 0,
+        id: payload.new.id, name: profile?.full_name || 'Gardener', authorStatus: profile?.verification_status || 'unverified',
+        time: 'just now', body: payload.new.body, likeCount: 0, commentCount: 0,
       };
       document.getElementById('postList').insertAdjacentHTML('afterbegin', postHtml(newPost));
     })
@@ -1108,6 +1197,7 @@ function navigateTo(pageName){
   document.getElementById('feed').scrollTo({ top: 0 });
   setActiveTab(pageName);
   if(pageName === 'performance') drawChart(portfolioPoints); // canvas needs a redraw once visible
+  if(pageName === 'news' && !newsLoaded) loadNews();
 }
 
 document.querySelectorAll('[data-back]').forEach(btn => {
@@ -1138,6 +1228,7 @@ document.getElementById('storeRail').addEventListener('click', (e) => {
   document.getElementById('storeModalCat').textContent = store.cat;
   document.getElementById('storeModalPrice').textContent = store.price;
   document.getElementById('storeModalStatus').textContent = store.verified.charAt(0).toUpperCase() + store.verified.slice(1);
+  document.getElementById('storeModalStatus').className = statusBadgeClass(store.verified);
   storeModal.hidden = false;
 });
 document.getElementById('storeModalCloseBtn').addEventListener('click', () => { storeModal.hidden = true; });
@@ -1548,10 +1639,13 @@ async function loadProfile(){
     document.getElementById('panelName').textContent = name;
     document.getElementById('panelEmail').textContent = user.email || '';
     document.getElementById('panelStatus').textContent = status.charAt(0).toUpperCase() + status.slice(1);
+    document.getElementById('panelStatus').className = statusBadgeClass(status);
 
     const ringCls = ringClass(status);
     document.getElementById('headerRing').className = ringCls;
     document.getElementById('panelRing').className = ringCls;
+    document.getElementById('navProfileRing').className = ringCls;
+    document.getElementById('navProfileInitials').textContent = initials2;
 
     await loadOwnStore(user.id);
     if(profile?.is_admin) await loadAdminQueue();
@@ -1699,7 +1793,7 @@ function setActiveTab(tabName){
   if(match) match.classList.add('tab--active');
 }
 
-document.querySelectorAll('.action-card').forEach(btn => {
+document.querySelectorAll('.action-card, .pill-row .pill').forEach(btn => {
   btn.addEventListener('click', () => {
     const action = btn.dataset.action;
     if(action === 'invest' || action === 'discover'){
@@ -1708,9 +1802,28 @@ document.querySelectorAll('.action-card').forEach(btn => {
       navigateTo('performance');
     } else if(action === 'tasks'){
       navigateTo('tasks');
+    } else if(action === 'dashboard'){
+      navigateTo('profile');
+    } else if(action === 'tools'){
+      navigateTo('tools');
     }
   });
 });
+
+// Share calculator — live as you type, no backend needed.
+function updateCalc(){
+  const amount = parseFloat(document.getElementById('calcAmount').value);
+  const price = parseFloat(document.getElementById('calcPrice').value);
+  const result = document.getElementById('calcResult');
+  if(!amount || !price || price <= 0){
+    result.textContent = 'Enter both fields to see estimated shares.';
+    return;
+  }
+  const shares = amount / price;
+  result.textContent = `≈ ${shares.toFixed(2)} shares`;
+}
+document.getElementById('calcAmount').addEventListener('input', updateCalc);
+document.getElementById('calcPrice').addEventListener('input', updateCalc);
 
 async function initAuth(){
   if(!isConfigured){
@@ -1844,6 +1957,8 @@ document.addEventListener('DOMContentLoaded', () => {
         navigateTo('market');
       } else if(tabName === 'performance'){
         navigateTo('performance');
+      } else if(tabName === 'news'){
+        navigateTo('news');
       } else if(tabName === 'profile'){
         navigateTo('profile');
       } else if(tabName === 'create'){
