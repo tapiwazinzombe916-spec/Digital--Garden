@@ -484,6 +484,50 @@ a{ color:inherit; text-decoration:none; }
 .action-title{ font-size:13px; font-weight:600; color:var(--ink); }
 .action-sub{ font-size:11px; color:var(--ink-soft); }
 
+.chart-legend{ display:flex; flex-wrap:wrap; gap:12px; margin:-6px 0 14px; }
+.legend-item{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink-soft); }
+.legend-dot{ width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
+
+.perf-nav-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:20px; }
+.perf-nav-card{
+  background:var(--paper-raised); border:1px solid var(--line);
+  border-radius:var(--radius-md); padding:16px 14px;
+  text-align:left; display:flex; flex-direction:column; gap:8px; min-height:76px;
+}
+
+.stat-list{ display:flex; flex-direction:column; gap:10px; }
+.stat-list-item{
+  background:var(--paper-raised); border:1px solid var(--line);
+  border-radius:var(--radius-md); padding:14px 16px;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.stat-list-label{ font-size:13px; color:var(--ink-soft); }
+.stat-list-value{ font-family:var(--font-mono); font-weight:600; font-size:14px; }
+
+.status-item{
+  background:var(--paper-raised); border:1px solid var(--line);
+  border-radius:var(--radius-md); padding:14px 16px; margin-bottom:10px;
+  display:flex; align-items:center; gap:12px;
+}
+.status-item-body{ flex:1; }
+.status-item-name{ font-size:14px; font-weight:600; }
+.status-item-amount{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:2px; }
+
+.history-item{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:12px 0; border-bottom:1px solid var(--line);
+}
+.history-item-label{ font-size:13px; font-weight:600; }
+.history-item-time{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+.history-item-amount{ font-family:var(--font-mono); font-weight:600; font-size:14px; }
+.history-item-amount--up{ color:var(--canopy); }
+.history-item-amount--down{ color:var(--clay); }
+
+.alloc-item{ margin-bottom:16px; }
+.alloc-item-head{ display:flex; justify-content:space-between; font-size:13px; font-weight:600; margin-bottom:6px; }
+.alloc-bar-track{ height:8px; border-radius:100px; background:var(--mist); overflow:hidden; }
+.alloc-bar-fill{ height:100%; border-radius:100px; }
+
 .pill-row{ display:flex; gap:12px; margin-bottom:8px; }
 .pill-row .pill{ padding:13px 0; }
 
@@ -656,11 +700,67 @@ a{ color:inherit; text-decoration:none; }
           <div class="stat-change stat-change--flat" id="statChange">— 0.0%</div>
         </div>
         <canvas id="portfolioChart" class="portfolio-chart" height="120"></canvas>
+        <div class="chart-legend" id="chartLegend"></div>
         <div class="stat-actions">
           <button class="pill pill--primary" id="investBtn">Invest</button>
           <button class="pill" id="withdrawBtn">Withdraw</button>
         </div>
       </section>
+
+      <div class="perf-nav-grid">
+        <button class="perf-nav-card" data-perf-page="financial">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M18 9l-5 5-3-3-4 4"/></svg></span>
+          <span class="action-title">Financial analysis</span>
+        </button>
+        <button class="perf-nav-card" data-perf-page="statuses">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></span>
+          <span class="action-title">Investment statuses</span>
+        </button>
+        <button class="perf-nav-card" data-perf-page="history">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg></span>
+          <span class="action-title">Transaction history</span>
+        </button>
+        <button class="perf-nav-card" data-perf-page="allocation">
+          <span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12A9 9 0 1 1 12 3v9z"/></svg></span>
+          <span class="action-title">Portfolio allocation</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ============ FINANCIAL ANALYSIS ============ -->
+    <section class="page" id="page-financial">
+      <div class="page-header">
+        <button class="page-back" data-back-perf aria-label="Back">←</button>
+        <h1>Financial analysis</h1>
+      </div>
+      <div id="financialStats"></div>
+    </section>
+
+    <!-- ============ INVESTMENT STATUSES ============ -->
+    <section class="page" id="page-statuses">
+      <div class="page-header">
+        <button class="page-back" data-back-perf aria-label="Back">←</button>
+        <h1>Investment statuses</h1>
+      </div>
+      <div id="statusesList"></div>
+    </section>
+
+    <!-- ============ TRANSACTION HISTORY ============ -->
+    <section class="page" id="page-history">
+      <div class="page-header">
+        <button class="page-back" data-back-perf aria-label="Back">←</button>
+        <h1>Transaction history</h1>
+      </div>
+      <div id="historyList"></div>
+    </section>
+
+    <!-- ============ PORTFOLIO ALLOCATION ============ -->
+    <section class="page" id="page-allocation">
+      <div class="page-header">
+        <button class="page-back" data-back-perf aria-label="Back">←</button>
+        <h1>Portfolio allocation</h1>
+      </div>
+      <div id="allocationList"></div>
     </section>
 
     <!-- ============ NEWS ============ -->
@@ -1244,8 +1344,12 @@ function navigateTo(pageName){
   if(target) target.classList.add('page--active');
   document.getElementById('feed').scrollTo({ top: 0 });
   setActiveTab(pageName);
-  if(pageName === 'performance') drawChart(portfolioPoints); // canvas needs a redraw once visible
+  if(pageName === 'performance') refreshPortfolioChart(); // canvas needs a redraw once visible
   if(pageName === 'news' && !newsLoaded) loadNews();
+  if(pageName === 'financial') loadFinancialAnalysis();
+  if(pageName === 'statuses') loadInvestmentStatuses();
+  if(pageName === 'history') loadTransactionHistory();
+  if(pageName === 'allocation') loadPortfolioAllocation();
 }
 
 document.querySelectorAll('[data-back]').forEach(btn => {
@@ -1412,10 +1516,12 @@ function showAuth(){
 }
 
 // ============================================================
-// Portfolio — live chart backed by the transactions ledger
+// Portfolio — multi-line chart, one line per business invested in
 // ============================================================
-let portfolioPoints = [];   // [{ t: Date, v: cumulative value }]
+let portfolioPoints = [];      // [{ t: Date, v: cumulative TOTAL value }] — drives the headline figure
+let allTransactions = [];      // raw rows, reused by chart + the 4 detail pages below
 let portfolioChannel = null;
+const CHART_COLORS = ['#2F6B4F', '#C98A2E', '#B5542B', '#4B5A50', '#7A9E8A', '#8E6C3A'];
 
 function computeCumulative(rows){
   let running = 0;
@@ -1425,7 +1531,26 @@ function computeCumulative(rows){
   });
 }
 
+// Groups transactions by store (buy/sell only) into one cumulative
+// series per business, so each store gets its own line on the chart.
+function groupByStore(rows){
+  const byStore = {}; // store_id -> { name, running, points: [] }
+  rows.forEach(r => {
+    if(!r.store_id || (r.kind !== 'buy' && r.kind !== 'sell')) return;
+    if(!byStore[r.store_id]){
+      byStore[r.store_id] = { name: r.stores?.name || 'Business', running: 0, points: [] };
+    }
+    byStore[r.store_id].running += Number(r.delta_amount);
+    byStore[r.store_id].points.push({ t: new Date(r.created_at), v: byStore[r.store_id].running });
+  });
+  return Object.values(byStore);
+}
+
 function drawChart(points){
+  drawMultiChart(points.length ? [{ points, color: null }] : []);
+}
+
+function drawMultiChart(series){
   const canvas = document.getElementById('portfolioChart');
   if(!canvas) return;
   const dpr = window.devicePixelRatio || 1;
@@ -1437,7 +1562,8 @@ function drawChart(points){
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, w, h);
 
-  if(points.length < 2){
+  const allPoints = series.flatMap(s => s.points);
+  if(allPoints.length < 2){
     ctx.strokeStyle = 'rgba(27,43,34,0.15)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1447,32 +1573,47 @@ function drawChart(points){
     return;
   }
 
-  const values = points.map(p => p.v);
+  const values = allPoints.map(p => p.v);
   const min = Math.min(...values, 0);
   const max = Math.max(...values, 0.01);
   const range = max - min || 1;
   const pad = 10;
+  const times = allPoints.map(p => p.t.getTime());
+  const minT = Math.min(...times), maxT = Math.max(...times) || minT + 1;
 
-  const x = i => pad + (i / (points.length - 1)) * (w - pad * 2);
+  const x = t => pad + ((t - minT) / (maxT - minT || 1)) * (w - pad * 2);
   const y = v => h - pad - ((v - min) / range) * (h - pad * 2);
 
-  const rising = values[values.length - 1] >= values[0];
-  ctx.strokeStyle = rising ? '#2F6B4F' : '#B5542B';
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  points.forEach((p, i) => {
-    const px = x(i), py = y(p.v);
-    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-  });
-  ctx.stroke();
+  series.forEach((s, si) => {
+    if(s.points.length < 1) return;
+    const rising = s.points[s.points.length - 1].v >= (s.points[0]?.v || 0);
+    const color = s.color || (rising ? '#2F6B4F' : '#B5542B');
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    s.points.forEach((p, i) => {
+      const px = x(p.t.getTime()), py = y(p.v);
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    });
+    ctx.stroke();
 
-  // Soft fill under the line
-  ctx.lineTo(x(points.length - 1), h - pad);
-  ctx.lineTo(x(0), h - pad);
-  ctx.closePath();
-  ctx.fillStyle = rising ? 'rgba(47,107,79,0.08)' : 'rgba(181,84,43,0.08)';
-  ctx.fill();
+    if(series.length === 1){
+      ctx.lineTo(x(s.points[s.points.length - 1].t.getTime()), h - pad);
+      ctx.lineTo(x(s.points[0].t.getTime()), h - pad);
+      ctx.closePath();
+      ctx.fillStyle = color + '14';
+      ctx.fill();
+    }
+  });
+}
+
+function renderLegend(storeSeries){
+  const legend = document.getElementById('chartLegend');
+  if(!legend) return;
+  legend.innerHTML = storeSeries.map((s, i) => `
+    <span class="legend-item"><span class="legend-dot" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>${s.name}</span>
+  `).join('');
 }
 
 function updateStatDisplay(points){
@@ -1494,6 +1635,21 @@ function updateStatDisplay(points){
   change.className = 'stat-change ' + (delta > 0 ? 'stat-change--up' : delta < 0 ? 'stat-change--down' : 'stat-change--flat');
 }
 
+async function refreshPortfolioChart(){
+  const storeGroups = groupByStore(allTransactions);
+  portfolioPoints = computeCumulative(allTransactions);
+  updateStatDisplay(portfolioPoints);
+
+  if(storeGroups.length >= 1){
+    const seriesed = storeGroups.map((g, i) => ({ points: g.points, color: CHART_COLORS[i % CHART_COLORS.length] }));
+    drawMultiChart(seriesed);
+    renderLegend(storeGroups);
+  } else {
+    drawChart(portfolioPoints);
+    renderLegend([]);
+  }
+}
+
 async function initPortfolio(){
   if(!isConfigured) return;
   const { data: { user } } = await client.auth.getUser();
@@ -1502,29 +1658,123 @@ async function initPortfolio(){
 
   const { data } = await client
     .from('transactions')
-    .select('delta_amount, created_at')
+    .select('delta_amount, created_at, kind, store_id, stores(name)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: true });
 
-  portfolioPoints = computeCumulative(data || []);
-  drawChart(portfolioPoints);
-  updateStatDisplay(portfolioPoints);
+  allTransactions = data || [];
+  refreshPortfolioChart();
 
   if(portfolioChannel) client.removeChannel(portfolioChannel);
   portfolioChannel = client
     .channel('transactions-' + user.id)
     .on('postgres_changes', {
       event: 'INSERT', schema: 'public', table: 'transactions', filter: `user_id=eq.${user.id}`
-    }, (payload) => {
-      const last = portfolioPoints.length ? portfolioPoints[portfolioPoints.length - 1].v : 0;
-      portfolioPoints.push({ t: new Date(payload.new.created_at), v: last + Number(payload.new.delta_amount) });
-      drawChart(portfolioPoints);
-      updateStatDisplay(portfolioPoints);
+    }, async (payload) => {
+      let storeName = null;
+      if(payload.new.store_id){
+        const { data: s } = await client.from('stores').select('name').eq('id', payload.new.store_id).single();
+        storeName = s?.name;
+      }
+      allTransactions.push({ ...payload.new, stores: storeName ? { name: storeName } : null });
+      refreshPortfolioChart();
     })
     .subscribe();
 }
 
-window.addEventListener('resize', () => drawChart(portfolioPoints));
+window.addEventListener('resize', () => refreshPortfolioChart());
+
+// ============================================================
+// Four detail pages — all derived from allTransactions, no extra queries
+// ============================================================
+document.querySelectorAll('[data-perf-page]').forEach(btn => {
+  btn.addEventListener('click', () => navigateTo(btn.dataset.perfPage));
+});
+document.querySelectorAll('[data-back-perf]').forEach(btn => {
+  btn.addEventListener('click', () => navigateTo('performance'));
+});
+
+function loadFinancialAnalysis(){
+  const total = portfolioPoints.length ? portfolioPoints[portfolioPoints.length - 1].v : 0;
+  const invested = allTransactions.filter(t => t.delta_amount > 0).reduce((s, t) => s + Number(t.delta_amount), 0);
+  const withdrawn = Math.abs(allTransactions.filter(t => t.delta_amount < 0).reduce((s, t) => s + Number(t.delta_amount), 0));
+  const businesses = new Set(allTransactions.filter(t => t.store_id).map(t => t.store_id)).size;
+  const lastTx = allTransactions[allTransactions.length - 1];
+
+  document.getElementById('financialStats').innerHTML = `
+    <div class="stat-list">
+      <div class="stat-list-item"><span class="stat-list-label">Current portfolio value</span><span class="stat-list-value">$${total.toFixed(2)}</span></div>
+      <div class="stat-list-item"><span class="stat-list-label">Total invested (all time)</span><span class="stat-list-value">$${invested.toFixed(2)}</span></div>
+      <div class="stat-list-item"><span class="stat-list-label">Total withdrawn</span><span class="stat-list-value">$${withdrawn.toFixed(2)}</span></div>
+      <div class="stat-list-item"><span class="stat-list-label">Businesses invested in</span><span class="stat-list-value">${businesses}</span></div>
+      <div class="stat-list-item"><span class="stat-list-label">Total transactions</span><span class="stat-list-value">${allTransactions.length}</span></div>
+      <div class="stat-list-item"><span class="stat-list-label">Last activity</span><span class="stat-list-value">${lastTx ? timeAgo(lastTx.created_at) : '—'}</span></div>
+    </div>
+  `;
+}
+
+function loadInvestmentStatuses(){
+  const groups = groupByStore(allTransactions);
+  const container = document.getElementById('statusesList');
+  if(!groups.length){
+    container.innerHTML = `<p class="comment-empty">You haven't invested in any businesses yet.</p>`;
+    return;
+  }
+  container.innerHTML = groups.map(g => {
+    const store = Object.values(storeCache).find(s => s.name === g.name);
+    const status = store?.verified || 'unverified';
+    return `
+      <div class="status-item">
+        <span class="${ringClass(status)}"><span class="avatar">${initials(g.name)}</span></span>
+        <div class="status-item-body">
+          <p class="status-item-name">${g.name}</p>
+          <p class="status-item-amount">$${g.running.toFixed(2)} invested</p>
+        </div>
+        <span class="${statusBadgeClass(status)}">${status.charAt(0).toUpperCase() + status.slice(1)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function loadTransactionHistory(){
+  const container = document.getElementById('historyList');
+  if(!allTransactions.length){
+    container.innerHTML = `<p class="comment-empty">No transactions yet.</p>`;
+    return;
+  }
+  const kindLabel = { deposit: 'Investment', buy: 'Bought shares', sell: 'Sold shares', withdraw: 'Withdrawal', market_move: 'Market movement' };
+  container.innerHTML = [...allTransactions].reverse().map(t => {
+    const up = Number(t.delta_amount) >= 0;
+    return `
+      <div class="history-item">
+        <div>
+          <p class="history-item-label">${kindLabel[t.kind] || t.kind}${t.stores?.name ? ' — ' + t.stores.name : ''}</p>
+          <p class="history-item-time">${timeAgo(t.created_at)}</p>
+        </div>
+        <span class="history-item-amount ${up ? 'history-item-amount--up' : 'history-item-amount--down'}">${up ? '+' : ''}$${Number(t.delta_amount).toFixed(2)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function loadPortfolioAllocation(){
+  const groups = groupByStore(allTransactions);
+  const container = document.getElementById('allocationList');
+  const total = groups.reduce((s, g) => s + Math.max(g.running, 0), 0);
+  if(!groups.length || total <= 0){
+    container.innerHTML = `<p class="comment-empty">No active investments to break down yet.</p>`;
+    return;
+  }
+  container.innerHTML = groups.map((g, i) => {
+    const pct = Math.max(0, (g.running / total) * 100);
+    return `
+      <div class="alloc-item">
+        <div class="alloc-item-head"><span>${g.name}</span><span>${pct.toFixed(1)}%</span></div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:${pct}%; background:${CHART_COLORS[i % CHART_COLORS.length]}"></div></div>
+      </div>
+    `;
+  }).join('');
+}
 
 // ============================================================
 // Invest / Withdraw — amount modal wired to the transactions ledger
