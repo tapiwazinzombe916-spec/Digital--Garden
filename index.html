@@ -6,7 +6,7 @@
 <title>Digital Garden — Zimbabwe's Community Marketplace & Investment Platform</title>
 <meta name="google-site-verification" content="eCknSVWqVGOv8veWLooLCziExSjsdaohrENwwsOdZzY" />
 <meta name="google-site-verification" content="pbCNpirm_IoF0t_2oDK4sZf-ozgsUJ--fzWfDg2OVtc" />
-<meta name="description" content="Digital Garden is a community-funded investment and marketplace platform for Zimbabwean farmers, vendors, and SMEs. Discover verified stores, invest in local businesses, complete micro-tasks, and grow together.">
+<meta name="description" content="Digital Garden is a community-funded investment and marketplace platform for Zimbabwean farmers, vendors, and SMEs, founded by Tapiwa Zinzombe. Discover verified stores, invest in local businesses, complete micro-tasks, and grow together.">
 <meta name="keywords" content="Digital Garden, Zimbabwe marketplace, community investment, verified stores, micro-tasks, local business investing">
 <link rel="canonical" href="https://digital--garden.tapiwazinzombe916.workers.dev/">
 
@@ -84,6 +84,14 @@ header{ display:flex; align-items:center; gap:8px; padding:12px 0 40px; }
 .closing h2{ font-family:var(--font-display); font-size:22px; font-weight:600; margin-bottom:12px; }
 .closing p{ color:var(--ink-soft); margin-bottom:22px; font-size:14px; }
 
+.founder{
+  padding:34px 0; margin-top:10px;
+  border-top:1px solid var(--line);
+}
+.founder-name{ font-family:var(--font-display); font-size:22px; font-weight:600; margin-top:6px; }
+.founder-title{ font-size:13px; color:var(--canopy); font-weight:600; margin-top:2px; }
+.founder-bio{ font-size:14px; color:var(--ink-soft); line-height:1.6; margin-top:12px; }
+
 footer{ padding:30px 0 10px; text-align:center; font-size:12px; color:var(--ink-soft); }
 </style>
 </head>
@@ -142,10 +150,33 @@ footer{ padding:30px 0 10px; text-align:center; font-size:12px; color:var(--ink-
     <a href="app.html" class="btn btn--primary">Create your account</a>
   </section>
 
+  <section class="founder">
+    <p class="eyebrow">About the founder</p>
+    <h2 class="founder-name">Tapiwa Zinzombe</h2>
+    <p class="founder-title">Founder &amp; CEO, Digital Garden</p>
+    <p class="founder-bio">Tapiwa Zinzombe is the founder and CEO of Digital Garden, a community-funded investment and marketplace platform built for Zimbabwean farmers, vendors, and small businesses. He is a digital marketing specialist focused on building technology that connects local entrepreneurs directly with investors and customers.</p>
+  </section>
+
   <footer>
     🌿 Digital Garden — built for Zimbabwe's local economy
   </footer>
 
 </div>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Digital Garden",
+  "url": "https://digital--garden.tapiwazinzombe916.workers.dev/",
+  "founder": {
+    "@type": "Person",
+    "name": "Tapiwa Zinzombe",
+    "jobTitle": "Founder & CEO",
+    "description": "Digital marketing specialist and founder of Digital Garden, a community-funded investment and marketplace platform for Zimbabwean farmers, vendors, and small businesses."
+  }
+}
+</script>
 </body>
+
 </html>
