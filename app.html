@@ -1545,21 +1545,19 @@ let ecocashPollTimer = null;
 function openAmountModal(kind, storeId){
   pendingTxKind = kind;
   pendingStoreId = storeId || null;
-  amountModalTitle.textContent = kind === 'deposit' ? 'Invest' : kind === 'buy' ? 'Buy shares' : 'Withdraw';
+  amountModalTitle.textContent = kind === 'deposit' ? 'Invest via EcoCash' : kind === 'buy' ? 'Buy shares via EcoCash' : 'Withdraw';
   amountInput.value = '';
   amountError.hidden = true;
   ecocashInstructions.hidden = true;
-  ecocashToggle.checked = false;
-  ecocashPhoneField.hidden = true;
-  // EcoCash only makes sense for money coming IN (Invest / Buy), not withdrawals.
-  ecocashToggleRow.hidden = (kind === 'withdraw');
+  ecocashPhone.value = '';
+  // Money coming IN must always go through real EcoCash payment —
+  // no toggle, no way to just type a number and credit yourself.
+  const isMoneyIn = (kind === 'deposit' || kind === 'buy');
+  ecocashToggleRow.hidden = true; // toggle removed entirely — no longer optional
+  ecocashPhoneField.hidden = !isMoneyIn;
   amountModal.hidden = false;
   amountInput.focus();
 }
-
-ecocashToggle.addEventListener('change', () => {
-  ecocashPhoneField.hidden = !ecocashToggle.checked;
-});
 
 document.getElementById('investBtn').addEventListener('click', () => openAmountModal('deposit'));
 document.getElementById('withdrawBtn').addEventListener('click', () => openAmountModal('withdraw'));
@@ -1586,7 +1584,7 @@ async function payWithEcocash(amt){
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ amount: amt, phone }),
+      body: JSON.stringify({ amount: amt, phone, storeId: pendingStoreId }),
     });
     const result = await res.json();
 
@@ -1636,35 +1634,38 @@ document.getElementById('amountConfirmBtn').addEventListener('click', async () =
     amountError.hidden = false;
     return;
   }
-  const currentValue = portfolioPoints.length ? portfolioPoints[portfolioPoints.length - 1].v : 0;
-  if(pendingTxKind === 'withdraw' && amt > currentValue){
-    amountError.textContent = `You can't withdraw more than your current balance ($${currentValue.toFixed(2)}).`;
-    amountError.hidden = false;
-    return;
-  }
   if(!isConfigured || !currentUserId){
     amountError.textContent = 'Backend not connected — nothing to record yet.';
     amountError.hidden = false;
     return;
   }
 
-  // EcoCash path — real money movement, goes through the Edge Function,
-  // not a direct table insert (a browser insert here could never be trusted).
-  if(ecocashToggle.checked && !ecocashToggleRow.hidden){
+  // Money coming IN (Invest / Buy shares) — always real, always through
+  // Paynow/EcoCash. There is no path here that lets typing a number
+  // directly credit an account; only the webhook, after Paynow confirms
+  // payment server-side, is allowed to write a 'deposit' or 'buy' row.
+  if(pendingTxKind === 'deposit' || pendingTxKind === 'buy'){
     await payWithEcocash(amt);
     return;
   }
 
+  // Withdraw is the one remaining direct-ledger action — it only ever
+  // reduces the balance, so it can't be used to fabricate money. It's
+  // still an internal-only ledger entry for now, not a real EcoCash
+  // payout — that's a separate disbursement flow to build later.
+  const currentValue = portfolioPoints.length ? portfolioPoints[portfolioPoints.length - 1].v : 0;
+  if(amt > currentValue){
+    amountError.textContent = `You can't withdraw more than your current balance ($${currentValue.toFixed(2)}).`;
+    amountError.hidden = false;
+    return;
+  }
   try{
     await client.from('transactions').insert({
       user_id: currentUserId,
-      kind: pendingTxKind,
-      delta_amount: pendingTxKind === 'withdraw' ? -amt : amt,
-      store_id: pendingStoreId,
+      kind: 'withdraw',
+      delta_amount: -amt,
     });
     amountModal.hidden = true;
-    // The realtime subscription above will pick up this insert and
-    // update the chart/figure automatically — no manual refresh needed.
   }catch(e){
     amountError.textContent = 'Something went wrong recording that — try again.';
     amountError.hidden = false;
