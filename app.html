@@ -368,6 +368,7 @@ a{ color:inherit; text-decoration:none; }
 }
 
 /* Header avatar (replaces bell) */
+.header-right{ display:flex; align-items:center; gap:14px; }
 .header-avatar{ padding:0; }
 .header-avatar .ring{ width:36px; height:36px; }
 .header-avatar .avatar{ font-size:13px; }
@@ -528,6 +529,27 @@ a{ color:inherit; text-decoration:none; }
 .alloc-bar-track{ height:8px; border-radius:100px; background:var(--mist); overflow:hidden; }
 .alloc-bar-fill{ height:100%; border-radius:100px; }
 
+.chat-list-item{
+  display:flex; align-items:center; gap:12px;
+  background:var(--paper-raised); border:1px solid var(--line);
+  border-radius:var(--radius-md); padding:14px; margin-bottom:10px;
+}
+.chat-list-body{ flex:1; min-width:0; }
+.chat-list-name{ font-size:14px; font-weight:600; }
+.chat-list-preview{ font-size:12px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+.chat-list-time{ font-size:11px; color:var(--ink-soft); flex:0 0 auto; }
+
+.chat-messages{
+  display:flex; flex-direction:column; gap:8px;
+  min-height:300px; padding-bottom:16px;
+}
+.chat-bubble{
+  max-width:75%; padding:10px 14px; border-radius:16px;
+  font-size:14px; line-height:1.4;
+}
+.chat-bubble--mine{ align-self:flex-end; background:var(--canopy); color:#fff; border-bottom-right-radius:4px; }
+.chat-bubble--theirs{ align-self:flex-start; background:var(--paper-raised); border:1px solid var(--line); border-bottom-left-radius:4px; }
+
 .pill-row{ display:flex; gap:12px; margin-bottom:8px; }
 .pill-row .pill{ padding:13px 0; }
 
@@ -593,11 +615,17 @@ a{ color:inherit; text-decoration:none; }
       <span class="brand-mark">🌿</span>
       <span class="brand-name">Digital Garden</span>
     </div>
-    <button class="header-avatar" id="headerAvatarBtn" aria-label="View profile">
-      <span class="ring ring--verified" id="headerRing">
-        <span class="avatar" id="headerInitials">T</span>
-      </span>
-    </button>
+    <div class="header-right">
+      <button class="icon-btn" id="chatInboxBtn" aria-label="Messages">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-4-1L3 20l1-4.5A8.38 8.38 0 0 1 12.5 3 8.5 8.5 0 0 1 21 11.5z"/></svg>
+        <span class="badge-dot" id="chatUnreadDot" hidden></span>
+      </button>
+      <button class="header-avatar" id="headerAvatarBtn" aria-label="View profile">
+        <span class="ring ring--verified" id="headerRing">
+          <span class="avatar" id="headerInitials">T</span>
+        </span>
+      </button>
+    </div>
   </header>
 
   <!-- Feed: a stack of full-screen pages, one active at a time -->
@@ -793,6 +821,28 @@ a{ color:inherit; text-decoration:none; }
       </section>
     </section>
 
+    <!-- ============ CHAT INBOX ============ -->
+    <section class="page" id="page-chats">
+      <div class="page-header">
+        <button class="page-back" data-back aria-label="Back">←</button>
+        <h1>Messages</h1>
+      </div>
+      <div id="chatList"></div>
+    </section>
+
+    <!-- ============ CHAT THREAD ============ -->
+    <section class="page" id="page-chat-thread">
+      <div class="page-header">
+        <button class="page-back" data-back-chats aria-label="Back">←</button>
+        <h1 id="chatThreadName">Chat</h1>
+      </div>
+      <div class="chat-messages" id="chatMessages"></div>
+      <form class="comment-form" id="chatSendForm">
+        <input type="text" id="chatInput" placeholder="Message…" autocomplete="off" required>
+        <button type="submit">Send</button>
+      </form>
+    </section>
+
     <!-- ============ PROFILE ============ -->
     <section class="page" id="page-profile">
       <div class="page-header">
@@ -972,6 +1022,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_SSUbjb1bEpqoTQua2hJOYw_YMRdV5ha';
 
 const STORAGE_KEY = 'dg_last_feed_v1';
 let currentUserId = null;
+let hasRoutedInitialLanding = false;
 const hasKeys = !SUPABASE_URL.includes('YOUR_') && !SUPABASE_ANON_KEY.includes('YOUR_');
 const libraryLoaded = typeof supabase !== 'undefined';
 
@@ -1110,9 +1161,10 @@ function renderPosts(posts){
 function postHtml(p, prefix){
   prefix = prefix || 'feed';
   const liked = likedPostIds.has(p.id);
+  const chatAttr = (p.authorId && p.authorId !== currentUserId) ? `data-start-chat="${p.authorId}" data-chat-name="${p.name}"` : '';
   return `
     <div class="post" data-post-id="${p.id || ''}">
-      <div class="post-head">
+      <div class="post-head" ${chatAttr} style="${chatAttr ? 'cursor:pointer;' : ''}">
         <span class="${ringClass(p.authorStatus)}"><span class="avatar">${initials(p.name)}</span></span>
         <div><p class="post-name">${p.name}</p><p class="post-time">${p.time}</p></div>
       </div>
@@ -1172,7 +1224,7 @@ async function loadFeed(limitOverride){
       stores: (storesRes.data || []).map(s => ({ id: s.id, name: s.name, cat: s.category, price: s.price_label, verified: s.verification_status })),
       tasks: (tasksRes.data || []).map(t => ({ id: t.id, title: t.title, loc: t.location_label, pay: `$${t.pay_amount}`, status: t.status, claimed_by: t.claimed_by })),
       posts: (postsRes.data || []).map(p => ({
-        id: p.id, name: p.profiles?.full_name || 'Gardener', authorStatus: p.profiles?.verification_status || 'unverified',
+        id: p.id, name: p.profiles?.full_name || 'Gardener', authorStatus: p.profiles?.verification_status || 'unverified', authorId: p.author_id,
         time: timeAgo(p.created_at), body: p.body,
         likeCount: p.post_likes?.[0]?.count || 0, commentCount: p.post_comments?.[0]?.count || 0,
       })),
@@ -1212,7 +1264,7 @@ async function loadNews(){
     }
 
     const news = (data || []).map(p => ({
-      id: p.id, name: p.profiles?.full_name || 'Digital Garden Team', authorStatus: p.profiles?.verification_status || 'verified',
+      id: p.id, name: p.profiles?.full_name || 'Digital Garden Team', authorStatus: p.profiles?.verification_status || 'verified', authorId: p.author_id,
       time: timeAgo(p.created_at), body: p.body,
       likeCount: p.post_likes?.[0]?.count || 0, commentCount: p.post_comments?.[0]?.count || 0,
     }));
@@ -1294,7 +1346,7 @@ function initCommunityRealtime(){
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, async (payload) => {
       const { data: profile } = await client.from('profiles').select('full_name, verification_status').eq('id', payload.new.author_id).single();
       const newPost = {
-        id: payload.new.id, name: profile?.full_name || 'Gardener', authorStatus: profile?.verification_status || 'unverified',
+        id: payload.new.id, name: profile?.full_name || 'Gardener', authorStatus: profile?.verification_status || 'unverified', authorId: payload.new.author_id,
         time: 'just now', body: payload.new.body, likeCount: 0, commentCount: 0,
       };
       document.getElementById('postList').insertAdjacentHTML('afterbegin', postHtml(newPost));
@@ -1350,7 +1402,130 @@ function navigateTo(pageName){
   if(pageName === 'statuses') loadInvestmentStatuses();
   if(pageName === 'history') loadTransactionHistory();
   if(pageName === 'allocation') loadPortfolioAllocation();
+  if(pageName === 'chats') loadChatInbox();
 }
+
+// ============================================================
+// Chat — direct 1:1 messaging, real-time
+// ============================================================
+let activeConversationId = null;
+let chatMessageChannel = null;
+
+document.getElementById('chatInboxBtn').addEventListener('click', () => navigateTo('chats'));
+document.querySelectorAll('[data-back-chats]').forEach(btn => {
+  btn.addEventListener('click', () => navigateTo('chats'));
+});
+
+async function loadChatInbox(){
+  const list = document.getElementById('chatList');
+  if(!isConfigured || !currentUserId){ list.innerHTML = ''; return; }
+
+  const { data: convos } = await client
+    .from('conversations')
+    .select('id, user_one, user_two, created_at')
+    .or(`user_one.eq.${currentUserId},user_two.eq.${currentUserId}`)
+    .order('created_at', { ascending: false });
+
+  if(!convos || !convos.length){
+    list.innerHTML = `<p class="comment-empty">No conversations yet — tap someone's name in Community or News to start one.</p>`;
+    return;
+  }
+
+  const rows = await Promise.all(convos.map(async (c) => {
+    const otherId = c.user_one === currentUserId ? c.user_two : c.user_one;
+    const [{ data: profile }, { data: lastMsg }] = await Promise.all([
+      client.from('profiles').select('full_name').eq('id', otherId).single(),
+      client.from('messages').select('body, created_at').eq('conversation_id', c.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    return { id: c.id, otherId, name: profile?.full_name || 'Gardener', preview: lastMsg?.body || 'Say hello 👋', time: lastMsg ? timeAgo(lastMsg.created_at) : '' };
+  }));
+
+  list.innerHTML = rows.map(r => `
+    <div class="chat-list-item" data-open-chat="${r.id}" data-open-chat-name="${r.name}">
+      <span class="ring ring--verified"><span class="avatar">${initials(r.name)}</span></span>
+      <div class="chat-list-body">
+        <p class="chat-list-name">${r.name}</p>
+        <p class="chat-list-preview">${r.preview}</p>
+      </div>
+      <span class="chat-list-time">${r.time}</span>
+    </div>
+  `).join('');
+}
+
+document.getElementById('chatList').addEventListener('click', (e) => {
+  const item = e.target.closest('[data-open-chat]');
+  if(!item) return;
+  openChatThread(item.dataset.openChat, item.dataset.openChatName);
+});
+
+// Find or create the conversation with someone, then open it.
+async function startChatWith(otherUserId, otherName){
+  if(!isConfigured || !currentUserId || otherUserId === currentUserId) return;
+
+  const { data: existing } = await client
+    .from('conversations')
+    .select('id')
+    .or(`and(user_one.eq.${currentUserId},user_two.eq.${otherUserId}),and(user_one.eq.${otherUserId},user_two.eq.${currentUserId})`)
+    .maybeSingle();
+
+  let conversationId = existing?.id;
+  if(!conversationId){
+    const { data: created } = await client.from('conversations').insert({ user_one: currentUserId, user_two: otherUserId }).select('id').single();
+    conversationId = created?.id;
+  }
+  if(conversationId) openChatThread(conversationId, otherName);
+}
+
+document.body.addEventListener('click', (e) => {
+  const trigger = e.target.closest('[data-start-chat]');
+  if(!trigger) return;
+  startChatWith(trigger.dataset.startChat, trigger.dataset.chatName);
+});
+
+async function openChatThread(conversationId, otherName){
+  activeConversationId = conversationId;
+  document.getElementById('chatThreadName').textContent = otherName || 'Chat';
+  navigateTo('chat-thread');
+  await loadMessages(conversationId);
+  subscribeToThread(conversationId);
+}
+
+async function loadMessages(conversationId){
+  const container = document.getElementById('chatMessages');
+  const { data } = await client.from('messages').select('body, sender_id, created_at').eq('conversation_id', conversationId).order('created_at', { ascending: true });
+  container.innerHTML = (data || []).map(m => `
+    <div class="chat-bubble ${m.sender_id === currentUserId ? 'chat-bubble--mine' : 'chat-bubble--theirs'}">${m.body}</div>
+  `).join('');
+  container.scrollTop = container.scrollHeight;
+}
+
+function subscribeToThread(conversationId){
+  if(chatMessageChannel) client.removeChannel(chatMessageChannel);
+  chatMessageChannel = client.channel('chat-' + conversationId)
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}`
+    }, (payload) => {
+      // Skip our own message here — it's already rendered optimistically on send.
+      if(payload.new.sender_id === currentUserId) return;
+      const container = document.getElementById('chatMessages');
+      container.insertAdjacentHTML('beforeend', `<div class="chat-bubble chat-bubble--theirs">${payload.new.body}</div>`);
+      container.scrollTop = container.scrollHeight;
+    })
+    .subscribe();
+}
+
+document.getElementById('chatSendForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if(!activeConversationId || !currentUserId) return;
+  const input = document.getElementById('chatInput');
+  const body = input.value.trim();
+  if(!body) return;
+  input.value = '';
+  const container = document.getElementById('chatMessages');
+  container.insertAdjacentHTML('beforeend', `<div class="chat-bubble chat-bubble--mine">${body}</div>`);
+  container.scrollTop = container.scrollHeight;
+  await client.from('messages').insert({ conversation_id: activeConversationId, sender_id: currentUserId, body });
+});
 
 document.querySelectorAll('[data-back]').forEach(btn => {
   btn.addEventListener('click', () => navigateTo('home'));
@@ -1511,8 +1686,10 @@ async function showApp(){
 function showAuth(){
   authScreen.hidden = false;
   appRoot.hidden = true;
+  hasRoutedInitialLanding = false;
   if(communityChannel){ client.removeChannel(communityChannel); communityChannel = null; }
   if(portfolioChannel){ client.removeChannel(portfolioChannel); portfolioChannel = null; }
+  if(chatMessageChannel){ client.removeChannel(chatMessageChannel); chatMessageChannel = null; }
 }
 
 // ============================================================
@@ -1953,6 +2130,16 @@ async function loadProfile(){
     await loadOwnStore(user.id);
     if(profile?.is_admin) await loadAdminQueue();
     document.getElementById('newUpdateBtn').hidden = !profile?.is_owner;
+
+    // Route people to the page that matches their role, once per login —
+    // owners/admins land on their tools, business owners land on their
+    // dashboard, everyone else stays on the regular Home screen.
+    if(!hasRoutedInitialLanding){
+      hasRoutedInitialLanding = true;
+      if(profile?.is_owner || profile?.is_admin || ownedStore){
+        navigateTo('profile');
+      }
+    }
   }catch(e){
     // Non-critical — greeting just falls back to its default text.
   }
