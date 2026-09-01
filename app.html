@@ -1432,10 +1432,10 @@ const authSubmit = document.getElementById('authSubmit');
 const nameField = document.getElementById('nameField');
 let authMode = 'login';
 
-document.querySelectorAll('.auth-tab').forEach(tab => {
+document.querySelectorAll('#authScreen .auth-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     authMode = tab.dataset.mode;
-    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('auth-tab--active'));
+    document.querySelectorAll('#authScreen .auth-tab').forEach(t => t.classList.remove('auth-tab--active'));
     tab.classList.add('auth-tab--active');
     nameField.hidden = authMode !== 'signup';
     authSubmit.textContent = authMode === 'signup' ? 'Sign up' : 'Log in';
