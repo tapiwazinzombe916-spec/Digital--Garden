@@ -146,25 +146,7 @@ a{ color:inherit; text-decoration:none; }
   margin-bottom:16px;
 }
 
-/* Amount modal */
-.amount-modal{
-  position:fixed; inset:0; z-index:110;
-  display:flex; align-items:center; justify-content:center;
-  background:rgba(27,43,34,0.4);
-  padding:24px;
-}
-.amount-modal[hidden]{ display:none; }
-.amount-modal-card{
-  width:100%; max-width:340px;
-  background:var(--paper-raised);
-  border-radius:var(--radius-lg);
-  padding:24px;
-}
-.amount-modal-title{
-  font-family:var(--font-display); font-weight:600; font-size:18px;
-  margin-bottom:16px;
-}
-.amount-modal-actions{ display:flex; gap:10px; margin-top:4px; }
+/* EcoCash toggle */
 .ecocash-toggle{
   display:flex; align-items:center; gap:8px;
   font-size:13px; color:var(--ink-soft); margin:4px 0 14px;
@@ -928,104 +910,99 @@ a{ color:inherit; text-decoration:none; }
     </section>
 
     <!-- Amount modal — shared by Invest / Withdraw / Buy-into-store -->
-    <div class="amount-modal" id="amountModal" hidden>
-      <div class="amount-modal-card">
-        <p class="amount-modal-title" id="amountModalTitle">Invest</p>
+    <!-- ============ AMOUNT (Invest / Withdraw / Buy shares) ============ -->
+    <section class="page" id="page-amount">
+      <div class="page-header">
+        <button class="page-back" id="amountCancelBtn" aria-label="Back">←</button>
+        <h1 id="amountModalTitle">Invest</h1>
+      </div>
+      <div class="field">
+        <label for="amountInput">Amount (USD)</label>
+        <input type="number" id="amountInput" min="1" step="0.01" placeholder="0.00">
+      </div>
+
+      <div class="field" id="ecocashPhoneField" hidden>
+        <label for="ecocashPhone">EcoCash number</label>
+        <input type="tel" id="ecocashPhone" placeholder="0771234567">
+      </div>
+      <label class="ecocash-toggle" id="ecocashToggleRow" hidden>
+        <input type="checkbox" id="ecocashToggle">
+        <span>Pay with EcoCash</span>
+      </label>
+
+      <p class="auth-error" id="amountError" hidden></p>
+      <p class="verify-note" id="ecocashInstructions" hidden></p>
+      <button class="pill pill--primary" style="width:100%; margin-top:8px;" id="amountConfirmBtn">Confirm</button>
+    </section>
+
+    <!-- ============ CREATE (post / task / store) ============ -->
+    <section class="page" id="page-create">
+      <div class="page-header">
+        <button class="page-back" id="createCancelBtn" aria-label="Back">←</button>
+        <h1>Create</h1>
+      </div>
+
+      <div class="auth-tabs" id="createTabs">
+        <button class="auth-tab auth-tab--active" data-create="post">Post</button>
+        <button class="auth-tab" data-create="task">Task</button>
+        <button class="auth-tab" data-create="store" id="createStoreTab">Store</button>
+      </div>
+
+      <!-- Post form -->
+      <div class="create-form" id="createPostForm">
         <div class="field">
-          <label for="amountInput">Amount (USD)</label>
-          <input type="number" id="amountInput" min="1" step="0.01" placeholder="0.00">
-        </div>
-
-        <div class="field" id="ecocashPhoneField" hidden>
-          <label for="ecocashPhone">EcoCash number</label>
-          <input type="tel" id="ecocashPhone" placeholder="0771234567">
-        </div>
-        <label class="ecocash-toggle" id="ecocashToggleRow" hidden>
-          <input type="checkbox" id="ecocashToggle">
-          <span>Pay with EcoCash</span>
-        </label>
-
-        <p class="auth-error" id="amountError" hidden></p>
-        <p class="verify-note" id="ecocashInstructions" hidden></p>
-        <div class="amount-modal-actions">
-          <button class="pill" id="amountCancelBtn">Cancel</button>
-          <button class="pill pill--primary" id="amountConfirmBtn">Confirm</button>
+          <label for="postBody">Share something with the community</label>
+          <input type="text" id="postBody" placeholder="What's on your mind?">
         </div>
       </div>
-    </div>
 
-    <!-- Create modal — post / task / store -->
-    <div class="amount-modal" id="createModal" hidden>
-      <div class="amount-modal-card">
-        <p class="amount-modal-title">Create</p>
-
-        <div class="auth-tabs" id="createTabs">
-          <button class="auth-tab auth-tab--active" data-create="post">Post</button>
-          <button class="auth-tab" data-create="task">Task</button>
-          <button class="auth-tab" data-create="store" id="createStoreTab">Store</button>
+      <!-- Task form -->
+      <div class="create-form" id="createTaskForm" hidden>
+        <div class="field">
+          <label for="taskTitle">Task title</label>
+          <input type="text" id="taskTitle" placeholder="Deliver produce crates">
         </div>
-
-        <!-- Post form -->
-        <div class="create-form" id="createPostForm">
-          <div class="field">
-            <label for="postBody">Share something with the community</label>
-            <input type="text" id="postBody" placeholder="What's on your mind?">
-          </div>
+        <div class="field">
+          <label for="taskLocation">Location</label>
+          <input type="text" id="taskLocation" placeholder="Mbare, 2.1km away">
         </div>
-
-        <!-- Task form -->
-        <div class="create-form" id="createTaskForm" hidden>
-          <div class="field">
-            <label for="taskTitle">Task title</label>
-            <input type="text" id="taskTitle" placeholder="Deliver produce crates">
-          </div>
-          <div class="field">
-            <label for="taskLocation">Location</label>
-            <input type="text" id="taskLocation" placeholder="Mbare, 2.1km away">
-          </div>
-          <div class="field">
-            <label for="taskPay">Pay (USD)</label>
-            <input type="number" id="taskPay" min="1" step="0.01" placeholder="8.00">
-          </div>
-        </div>
-
-        <!-- Store form -->
-        <div class="create-form" id="createStoreForm" hidden>
-          <div class="field">
-            <label for="storeName">Store name</label>
-            <input type="text" id="storeName" placeholder="Mbare Fresh Produce">
-          </div>
-          <div class="field">
-            <label for="storeCategory">Category</label>
-            <input type="text" id="storeCategory" placeholder="Agriculture">
-          </div>
-          <div class="field">
-            <label for="storePrice">Price per share (e.g. $1.20/share)</label>
-            <input type="text" id="storePrice" placeholder="$1.20/share">
-          </div>
-        </div>
-
-        <p class="auth-error" id="createError" hidden></p>
-        <div class="amount-modal-actions">
-          <button class="pill" id="createCancelBtn">Cancel</button>
-          <button class="pill pill--primary" id="createConfirmBtn">Post</button>
+        <div class="field">
+          <label for="taskPay">Pay (USD)</label>
+          <input type="number" id="taskPay" min="1" step="0.01" placeholder="8.00">
         </div>
       </div>
-    </div>
 
-    <!-- Store detail modal -->
-    <div class="amount-modal" id="storeModal" hidden>
-      <div class="amount-modal-card">
-        <p class="amount-modal-title" id="storeModalName">Store</p>
-        <p class="verify-store-status" id="storeModalCat">—</p>
-        <p class="stat-figure" id="storeModalPrice" style="font-size:22px; margin:14px 0;">—</p>
-        <p class="profile-status" id="storeModalStatus">Unverified</p>
-        <div class="amount-modal-actions" style="margin-top:18px;">
-          <button class="pill" id="storeModalCloseBtn">Close</button>
-          <button class="pill pill--primary" id="storeModalBuyBtn">Buy shares</button>
+      <!-- Store form -->
+      <div class="create-form" id="createStoreForm" hidden>
+        <div class="field">
+          <label for="storeName">Store name</label>
+          <input type="text" id="storeName" placeholder="Mbare Fresh Produce">
+        </div>
+        <div class="field">
+          <label for="storeCategory">Category</label>
+          <input type="text" id="storeCategory" placeholder="Agriculture">
+        </div>
+        <div class="field">
+          <label for="storePrice">Price per share (e.g. $1.20/share)</label>
+          <input type="text" id="storePrice" placeholder="$1.20/share">
         </div>
       </div>
-    </div>
+
+      <p class="auth-error" id="createError" hidden></p>
+      <button class="pill pill--primary" style="width:100%; margin-top:8px;" id="createConfirmBtn">Post</button>
+    </section>
+
+    <!-- ============ STORE DETAIL ============ -->
+    <section class="page" id="page-store-detail">
+      <div class="page-header">
+        <button class="page-back" id="storeModalCloseBtn" aria-label="Back">←</button>
+        <h1 id="storeModalName">Store</h1>
+      </div>
+      <p class="verify-store-status" id="storeModalCat">—</p>
+      <p class="stat-figure" id="storeModalPrice" style="font-size:26px; margin:16px 0;">—</p>
+      <p class="profile-status" id="storeModalStatus">Unverified</p>
+      <button class="pill pill--primary" style="width:100%; margin-top:20px;" id="storeModalBuyBtn">Buy shares</button>
+    </section>
 
     <div class="offline-banner" id="offlineBanner" hidden>
       You're offline — showing your last saved data.
@@ -1589,10 +1566,12 @@ document.getElementById('homeSearchShortcut').addEventListener('click', () => {
   searchInput.focus();
 });
 document.getElementById('newPostBtn').addEventListener('click', () => {
+  createReturnPage = 'community';
   openCreateModal();
   document.querySelector('#createTabs [data-create="post"]').click();
 });
 document.getElementById('newUpdateBtn').addEventListener('click', () => {
+  createReturnPage = 'news';
   openCreateModal();
   document.querySelector('#createTabs [data-create="post"]').click();
 });
@@ -1600,7 +1579,6 @@ document.getElementById('newUpdateBtn').addEventListener('click', () => {
 // ============================================================
 // Store cards — tap to view details + buy shares in that store
 // ============================================================
-const storeModal = document.getElementById('storeModal');
 let selectedStoreId = null;
 
 document.getElementById('storeRail').addEventListener('click', (e) => {
@@ -1614,11 +1592,10 @@ document.getElementById('storeRail').addEventListener('click', (e) => {
   document.getElementById('storeModalPrice').textContent = store.price;
   document.getElementById('storeModalStatus').textContent = store.verified.charAt(0).toUpperCase() + store.verified.slice(1);
   document.getElementById('storeModalStatus').className = statusBadgeClass(store.verified);
-  storeModal.hidden = false;
+  navigateTo('store-detail');
 });
-document.getElementById('storeModalCloseBtn').addEventListener('click', () => { storeModal.hidden = true; });
+document.getElementById('storeModalCloseBtn').addEventListener('click', () => navigateTo('market'));
 document.getElementById('storeModalBuyBtn').addEventListener('click', () => {
-  storeModal.hidden = true;
   openAmountModal('buy', selectedStoreId);
 });
 
@@ -2029,7 +2006,6 @@ function loadPortfolioAllocation(){
 // ============================================================
 // Invest / Withdraw — amount modal wired to the transactions ledger
 // ============================================================
-const amountModal = document.getElementById('amountModal');
 const amountModalTitle = document.getElementById('amountModalTitle');
 const amountInput = document.getElementById('amountInput');
 const amountError = document.getElementById('amountError');
@@ -2041,10 +2017,12 @@ const ecocashInstructions = document.getElementById('ecocashInstructions');
 let pendingTxKind = 'buy';
 let pendingStoreId = null;
 let ecocashPollTimer = null;
+let amountReturnPage = 'performance';
 
 function openAmountModal(kind, storeId){
   pendingTxKind = kind;
   pendingStoreId = storeId || null;
+  amountReturnPage = storeId ? 'store-detail' : 'performance';
   amountModalTitle.textContent = kind === 'deposit' ? 'Invest via EcoCash' : kind === 'buy' ? 'Buy shares via EcoCash' : 'Withdraw';
   amountInput.value = '';
   amountError.hidden = true;
@@ -2055,14 +2033,14 @@ function openAmountModal(kind, storeId){
   const isMoneyIn = (kind === 'deposit' || kind === 'buy');
   ecocashToggleRow.hidden = true; // toggle removed entirely — no longer optional
   ecocashPhoneField.hidden = !isMoneyIn;
-  amountModal.hidden = false;
+  navigateTo('amount');
   amountInput.focus();
 }
 
 document.getElementById('investBtn').addEventListener('click', () => openAmountModal('deposit'));
 document.getElementById('withdrawBtn').addEventListener('click', () => openAmountModal('withdraw'));
 document.getElementById('amountCancelBtn').addEventListener('click', () => {
-  amountModal.hidden = true;
+  navigateTo(amountReturnPage);
   if(ecocashPollTimer) clearInterval(ecocashPollTimer);
 });
 
@@ -2108,7 +2086,7 @@ async function payWithEcocash(amt){
       const { data } = await client.from('paynow_payments').select('status').eq('reference', reference).single();
       if(data?.status === 'paid'){
         clearInterval(ecocashPollTimer);
-        amountModal.hidden = true;
+        navigateTo(amountReturnPage);
         confirmBtn.disabled = false;
       } else if(data?.status === 'failed' || attempts > 40){ // ~2 min at 3s intervals
         clearInterval(ecocashPollTimer);
@@ -2198,7 +2176,7 @@ document.getElementById('amountConfirmBtn').addEventListener('click', async () =
       kind: 'withdraw',
       delta_amount: -amt,
     });
-    amountModal.hidden = true;
+    navigateTo(amountReturnPage);
   }catch(e){
     amountError.textContent = 'Something went wrong recording that — try again.';
     amountError.hidden = false;
@@ -2486,8 +2464,8 @@ async function initAuth(){
 // ============================================================
 // Create modal — post to community / post a task / create a store
 // ============================================================
-const createModal = document.getElementById('createModal');
 let activeCreateTab = 'post';
+let createReturnPage = 'home';
 
 function openCreateModal(){
   activeCreateTab = 'post';
@@ -2503,7 +2481,7 @@ function openCreateModal(){
   // this app supports one store per owner for now.
   document.getElementById('createStoreTab').hidden = !!ownedStore;
 
-  createModal.hidden = false;
+  navigateTo('create');
 }
 
 document.querySelectorAll('#createTabs .auth-tab').forEach(tabBtn => {
@@ -2520,7 +2498,7 @@ document.querySelectorAll('#createTabs .auth-tab').forEach(tabBtn => {
   });
 });
 
-document.getElementById('createCancelBtn').addEventListener('click', () => { createModal.hidden = true; });
+document.getElementById('createCancelBtn').addEventListener('click', () => navigateTo(createReturnPage));
 
 document.getElementById('createConfirmBtn').addEventListener('click', async () => {
   const errEl = document.getElementById('createError');
@@ -2571,7 +2549,7 @@ document.getElementById('createConfirmBtn').addEventListener('click', async () =
       await loadFeed();
       await loadOwnStore(currentUserId);
     }
-    createModal.hidden = true;
+    navigateTo(createReturnPage);
   }catch(e){
     errEl.textContent = 'Something went wrong saving that — try again.';
     errEl.hidden = false;
@@ -2606,6 +2584,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if(tabName === 'profile'){
         navigateTo('profile');
       } else if(tabName === 'create'){
+        createReturnPage = 'home';
         openCreateModal();
       }
     });
