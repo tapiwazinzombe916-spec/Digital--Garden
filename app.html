@@ -435,6 +435,9 @@ a{ color:inherit; text-decoration:none; }
   font-size:11px; color:var(--canopy); margin-top:8px;
   background:rgba(47,107,79,0.1); padding:8px 10px; border-radius:var(--radius-sm);
 }
+.business-balance-box{
+  margin-top:16px; padding-top:16px; border-top:1px solid var(--line);
+}
 .pill:disabled{ opacity:0.5; }
 
 .admin-block{
@@ -904,6 +907,14 @@ a{ color:inherit; text-decoration:none; }
           <p class="verify-store-status" id="verifyStoreStatus">Unverified</p>
           <button class="pill pill--primary" id="requestVerifyBtn" style="width:100%; margin-top:8px;">Request verification</button>
           <p class="verify-note" id="verifyNote" hidden></p>
+
+          <div class="business-balance-box">
+            <p class="stat-list-label">Available business balance</p>
+            <p class="stat-figure" id="businessBalanceFigure" style="font-size:22px;">$0.00</p>
+            <button class="pill pill--primary" id="businessWithdrawBtn" style="width:100%; margin-top:8px;">Withdraw business balance</button>
+            <p class="auth-error" id="businessWithdrawError" hidden></p>
+            <p class="verify-note">Records the withdrawal on your ledger. Doesn't yet send a real EcoCash payout — that needs a separate disbursement setup with Paynow.</p>
+          </div>
         </div>
 
         <button class="pill" id="logoutBtn" style="width:100%; margin-top:14px;">Log out</button>
@@ -2142,9 +2153,15 @@ document.getElementById('amountConfirmBtn').addEventListener('click', async () =
   // reduces the balance, so it can't be used to fabricate money. It's
   // still an internal-only ledger entry for now, not a real EcoCash
   // payout — that's a separate disbursement flow to build later.
-  const currentValue = portfolioPoints.length ? portfolioPoints[portfolioPoints.length - 1].v : 0;
-  if(amt > currentValue){
-    amountError.textContent = `You can't withdraw more than your current balance ($${currentValue.toFixed(2)}).`;
+  // Withdrawable CASH is only deposits minus withdrawals — money put
+  // into 'buy' transactions has been committed to a business and is no
+  // longer freely withdrawable by the investor; it belongs to that
+  // business's own balance now (see withdraw_business_funds()).
+  const withdrawableCash = allTransactions
+    .filter(t => t.kind === 'deposit' || t.kind === 'withdraw')
+    .reduce((sum, t) => sum + Number(t.delta_amount), 0);
+  if(amt > withdrawableCash){
+    amountError.textContent = `You can't withdraw more than your available cash ($${withdrawableCash.toFixed(2)}). Money invested in businesses isn't withdrawable directly.`;
     amountError.hidden = false;
     return;
   }
@@ -2270,7 +2287,51 @@ async function loadOwnStore(userId){
     btn.disabled = false;
     btn.textContent = 'Request verification';
   }
+
+  await loadBusinessBalance(data.id);
 }
+
+async function loadBusinessBalance(storeId){
+  const { data } = await client
+    .from('transactions')
+    .select('kind, delta_amount')
+    .eq('store_id', storeId)
+    .in('kind', ['buy', 'business_withdraw']);
+
+  const available = (data || []).reduce((sum, t) => sum + Number(t.delta_amount), 0);
+  document.getElementById('businessBalanceFigure').textContent = `$${available.toFixed(2)}`;
+  document.getElementById('businessWithdrawBtn').dataset.available = available;
+}
+
+document.getElementById('businessWithdrawBtn').addEventListener('click', async () => {
+  if(!ownedStore) return;
+  const errEl = document.getElementById('businessWithdrawError');
+  errEl.hidden = true;
+  const available = parseFloat(document.getElementById('businessWithdrawBtn').dataset.available || '0');
+
+  if(available <= 0){
+    errEl.textContent = 'No available balance to withdraw yet.';
+    errEl.hidden = false;
+    return;
+  }
+
+  const btn = document.getElementById('businessWithdrawBtn');
+  btn.disabled = true;
+  try{
+    // The server function re-checks ownership and balance itself —
+    // this call can never withdraw more than what's genuinely available.
+    const { error } = await client.rpc('withdraw_business_funds', {
+      p_store_id: ownedStore.id,
+      p_amount: available,
+    });
+    if(error) throw error;
+    await loadBusinessBalance(ownedStore.id);
+  }catch(e){
+    errEl.textContent = e.message || 'Withdrawal failed — try again.';
+    errEl.hidden = false;
+  }
+  btn.disabled = false;
+});
 
 document.getElementById('requestVerifyBtn').addEventListener('click', async () => {
   if(!ownedStore) return;
