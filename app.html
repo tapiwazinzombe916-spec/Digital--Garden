@@ -360,6 +360,19 @@ a{ color:inherit; text-decoration:none; }
   font-family:var(--font-body); font-size:14px;
 }
 .field input:focus{ outline:2px solid var(--canopy); outline-offset:1px; }
+.field select{
+  width:100%; padding:12px 14px;
+  border:1px solid var(--line); border-radius:var(--radius-sm);
+  background:var(--paper); color:var(--ink);
+  font-family:var(--font-body); font-size:14px;
+}
+.account-type-pills{ display:flex; gap:8px; }
+.account-type-pill{
+  flex:1; padding:11px 0; border-radius:var(--radius-sm);
+  border:1px solid var(--line); background:var(--paper);
+  font-size:13px; font-weight:600; color:var(--ink-soft);
+}
+.account-type-pill--active{ background:var(--canopy); color:#fff; border-color:var(--canopy); }
 .auth-error{
   font-size:12px; color:var(--clay);
   background:rgba(181,84,43,0.1);
@@ -594,6 +607,34 @@ a{ color:inherit; text-decoration:none; }
           <label for="fullName">Full name</label>
           <input type="text" id="fullName" placeholder="Tendai Moyo" autocomplete="name">
         </div>
+
+        <div class="field" id="accountTypeField" hidden>
+          <label>Registering as</label>
+          <div class="account-type-pills">
+            <button type="button" class="account-type-pill account-type-pill--active" data-account-type="individual">Individual</button>
+            <button type="button" class="account-type-pill" data-account-type="business">Business</button>
+          </div>
+        </div>
+
+        <div class="field" id="windowsField" hidden>
+          <label for="investmentWindow">Investment window (lock-in before you can withdraw)</label>
+          <select id="investmentWindow">
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">90 days</option>
+            <option value="180">180 days</option>
+            <option value="365">1 year</option>
+          </select>
+        </div>
+        <div class="field" id="withdrawWindowField" hidden>
+          <label for="withdrawWindow">Withdrawal window (how often you can withdraw)</label>
+          <select id="withdrawWindow">
+            <option value="7">Every 7 days</option>
+            <option value="30" selected>Every 30 days</option>
+            <option value="90">Every 90 days</option>
+          </select>
+        </div>
+
         <div class="field">
           <label for="email">Email</label>
           <input type="email" id="email" placeholder="you@example.com" autocomplete="email" required>
@@ -1023,6 +1064,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_SSUbjb1bEpqoTQua2hJOYw_YMRdV5ha';
 const STORAGE_KEY = 'dg_last_feed_v1';
 let currentUserId = null;
 let hasRoutedInitialLanding = false;
+let myInvestmentWindowDays = 30;
+let myWithdrawalWindowDays = 30;
 const hasKeys = !SUPABASE_URL.includes('YOUR_') && !SUPABASE_ANON_KEY.includes('YOUR_');
 const libraryLoaded = typeof supabase !== 'undefined';
 
@@ -1613,8 +1656,20 @@ document.querySelectorAll('#authScreen .auth-tab').forEach(tab => {
     document.querySelectorAll('#authScreen .auth-tab').forEach(t => t.classList.remove('auth-tab--active'));
     tab.classList.add('auth-tab--active');
     nameField.hidden = authMode !== 'signup';
+    document.getElementById('accountTypeField').hidden = authMode !== 'signup';
+    document.getElementById('windowsField').hidden = authMode !== 'signup';
+    document.getElementById('withdrawWindowField').hidden = authMode !== 'signup';
     authSubmit.textContent = authMode === 'signup' ? 'Sign up' : 'Log in';
     authError.hidden = true;
+  });
+});
+
+let selectedAccountType = 'individual';
+document.querySelectorAll('.account-type-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    selectedAccountType = pill.dataset.accountType;
+    document.querySelectorAll('.account-type-pill').forEach(p => p.classList.remove('account-type-pill--active'));
+    pill.classList.add('account-type-pill--active');
   });
 });
 
@@ -1642,9 +1697,16 @@ authForm.addEventListener('submit', async (e) => {
   try{
     if(authMode === 'signup'){
       const fullName = document.getElementById('fullName').value.trim();
+      const investmentWindowDays = document.getElementById('investmentWindow').value;
+      const withdrawalWindowDays = document.getElementById('withdrawWindow').value;
       const { data, error } = await client.auth.signUp({
         email, password,
-        options: { data: { full_name: fullName || 'New Gardener' } }
+        options: { data: {
+          full_name: fullName || 'New Gardener',
+          account_type: selectedAccountType,
+          investment_window_days: investmentWindowDays,
+          withdrawal_window_days: withdrawalWindowDays,
+        } }
       });
       if(error) throw error;
       if(!data.session){
@@ -2086,6 +2148,33 @@ document.getElementById('amountConfirmBtn').addEventListener('click', async () =
     amountError.hidden = false;
     return;
   }
+
+  // Enforce the investment lock-in window: money must have been in for
+  // at least myInvestmentWindowDays since the FIRST money-in transaction.
+  const moneyInTx = allTransactions.filter(t => t.kind === 'deposit' || t.kind === 'buy');
+  if(moneyInTx.length){
+    const firstDate = new Date(moneyInTx[0].created_at);
+    const eligibleDate = new Date(firstDate.getTime() + myInvestmentWindowDays * 86400000);
+    if(new Date() < eligibleDate){
+      amountError.textContent = `Your funds are locked until ${eligibleDate.toLocaleDateString()} (${myInvestmentWindowDays}-day investment window).`;
+      amountError.hidden = false;
+      return;
+    }
+  }
+
+  // Enforce the withdrawal cycle: only one withdrawal allowed per
+  // myWithdrawalWindowDays, counted from the last withdrawal.
+  const priorWithdrawals = allTransactions.filter(t => t.kind === 'withdraw');
+  if(priorWithdrawals.length){
+    const lastWithdraw = new Date(priorWithdrawals[priorWithdrawals.length - 1].created_at);
+    const nextEligible = new Date(lastWithdraw.getTime() + myWithdrawalWindowDays * 86400000);
+    if(new Date() < nextEligible){
+      amountError.textContent = `You can withdraw again starting ${nextEligible.toLocaleDateString()} (${myWithdrawalWindowDays}-day withdrawal window).`;
+      amountError.hidden = false;
+      return;
+    }
+  }
+
   try{
     await client.from('transactions').insert({
       user_id: currentUserId,
@@ -2107,7 +2196,10 @@ async function loadProfile(){
   try{
     const { data: { user } } = await client.auth.getUser();
     if(!user) return;
-    const { data: profile } = await client.from('profiles').select('full_name, verification_status, is_admin, is_owner').eq('id', user.id).single();
+    const { data: profile } = await client.from('profiles').select('full_name, verification_status, is_admin, is_owner, account_type, investment_window_days, withdrawal_window_days').eq('id', user.id).single();
+
+    myInvestmentWindowDays = profile?.investment_window_days || 30;
+    myWithdrawalWindowDays = profile?.withdrawal_window_days || 30;
 
     const name = profile?.full_name || 'Gardener';
     const initials2 = initials(name);
