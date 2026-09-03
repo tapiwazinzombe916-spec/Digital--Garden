@@ -2092,6 +2092,7 @@ async function payWithEcocash(amt){
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`,
+        'apikey': SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({ amount: amt, phone, storeId: pendingStoreId }),
     });
