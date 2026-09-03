@@ -899,14 +899,44 @@ a{ color:inherit; text-decoration:none; }
           </div>
         </div>
 
+        <div class="verify-block">
+          <p class="verify-heading">Identity verification</p>
+          <p class="verify-note" id="kycStatusNote">Upload an ID document to get your account verified.</p>
+          <div class="field">
+            <label for="kycDocType">Document type</label>
+            <select id="kycDocType">
+              <option value="national_id">National ID</option>
+              <option value="passport">Passport</option>
+              <option value="birth_certificate">Birth certificate</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="kycFile">Upload document (photo or PDF)</label>
+            <input type="file" id="kycFile" accept="image/*,.pdf">
+          </div>
+          <p class="auth-error" id="kycError" hidden></p>
+          <button class="pill pill--primary" id="kycSubmitBtn" style="width:100%; margin-top:8px;">Submit for review</button>
+        </div>
+
+        <button class="pill pill--primary" id="ownerPanelBtn" style="width:100%; margin-top:14px;" hidden>Admin Panel</button>
         <button class="pill" id="logoutBtn" style="width:100%; margin-top:14px;">Log out</button>
       </div>
+    </section>
 
-      <!-- Admin-only: pending verification review queue -->
-      <div class="admin-block" id="adminBlock" hidden>
-        <p class="verify-heading">Pending reviews</p>
-        <div id="adminRequestList"></div>
+    <!-- ============ ADMIN PANEL (owner-only) ============ -->
+    <section class="page" id="page-admin">
+      <div class="page-header">
+        <button class="page-back" data-back aria-label="Back">←</button>
+        <h1>Admin Panel</h1>
       </div>
+
+      <button class="pill pill--primary" id="adminPostNewsBtn" style="width:100%; margin-bottom:24px;">Post news</button>
+
+      <p class="verify-heading">Pending identity verifications</p>
+      <div id="kycQueueList" style="margin-bottom:24px;"></div>
+
+      <p class="verify-heading">Pending store verifications</p>
+      <div id="adminRequestList"></div>
     </section>
 
     <!-- Amount modal — shared by Invest / Withdraw / Buy-into-store -->
@@ -1433,6 +1463,7 @@ function navigateTo(pageName){
   if(pageName === 'statuses') loadInvestmentStatuses();
   if(pageName === 'history') loadTransactionHistory();
   if(pageName === 'allocation') loadPortfolioAllocation();
+  if(pageName === 'admin'){ loadKycQueue(); loadAdminQueue(); }
   if(pageName === 'chats') loadChatInbox();
 }
 
@@ -2217,13 +2248,16 @@ async function loadProfile(){
     await loadOwnStore(user.id);
     if(profile?.is_admin) await loadAdminQueue();
     document.getElementById('newUpdateBtn').hidden = !profile?.is_owner;
+    document.getElementById('ownerPanelBtn').hidden = !profile?.is_owner;
 
     // Route people to the page that matches their role, once per login —
-    // owners/admins land on their tools, business owners land on their
-    // dashboard, everyone else stays on the regular Home screen.
+    // the owner lands straight on the Admin Panel, business owners land
+    // on their dashboard, everyone else stays on the regular Home screen.
     if(!hasRoutedInitialLanding){
       hasRoutedInitialLanding = true;
-      if(profile?.is_owner || profile?.is_admin || ownedStore){
+      if(profile?.is_owner){
+        navigateTo('admin');
+      } else if(profile?.is_admin || ownedStore){
         navigateTo('profile');
       }
     }
@@ -2332,7 +2366,6 @@ document.getElementById('requestVerifyBtn').addEventListener('click', async () =
 // Verification — admin review queue
 // ============================================================
 async function loadAdminQueue(){
-  const adminBlock = document.getElementById('adminBlock');
   const list = document.getElementById('adminRequestList');
   const { data } = await client
     .from('verification_requests')
@@ -2340,8 +2373,7 @@ async function loadAdminQueue(){
     .eq('status', 'pending')
     .order('created_at', { ascending: true });
 
-  if(!data || !data.length){ adminBlock.hidden = true; return; }
-  adminBlock.hidden = false;
+  if(!data || !data.length){ list.innerHTML = `<p class="comment-empty">Nothing pending.</p>`; return; }
   list.innerHTML = data.map(r => `
     <div class="admin-request" data-request-id="${r.id}">
       <p class="admin-request-name">${r.stores?.name || 'Unknown store'}</p>
@@ -2364,6 +2396,88 @@ async function loadAdminQueue(){
           const { data: { user } } = await client.auth.getUser();
           await loadOwnStore(user.id);
         }
+      }catch(e){
+        btn.closest('.admin-request').style.opacity = '1';
+      }
+    });
+  });
+}
+
+// ============================================================
+// Identity verification (KYC) — submission + owner-only review
+// ============================================================
+document.getElementById('kycSubmitBtn').addEventListener('click', async () => {
+  if(!isConfigured || !currentUserId) return;
+  const fileInput = document.getElementById('kycFile');
+  const errEl = document.getElementById('kycError');
+  errEl.hidden = true;
+
+  const file = fileInput.files[0];
+  if(!file){
+    errEl.textContent = 'Choose a file first.';
+    errEl.hidden = false;
+    return;
+  }
+
+  const btn = document.getElementById('kycSubmitBtn');
+  btn.disabled = true;
+  try{
+    const docType = document.getElementById('kycDocType').value;
+    const path = `${currentUserId}/${Date.now()}-${file.name}`;
+    const { error: uploadError } = await client.storage.from('kyc-documents').upload(path, file);
+    if(uploadError) throw uploadError;
+
+    await client.from('kyc_submissions').insert({
+      user_id: currentUserId,
+      document_type: docType,
+      file_path: path,
+    });
+
+    document.getElementById('kycStatusNote').textContent = 'Submitted — awaiting review.';
+    fileInput.value = '';
+  }catch(e){
+    errEl.textContent = e.message || 'Upload failed — try again.';
+    errEl.hidden = false;
+  }
+  btn.disabled = false;
+});
+
+document.getElementById('ownerPanelBtn').addEventListener('click', () => navigateTo('admin'));
+document.getElementById('adminPostNewsBtn').addEventListener('click', () => {
+  createReturnPage = 'admin';
+  openCreateModal();
+  document.querySelector('#createTabs [data-create="post"]').click();
+});
+
+async function loadKycQueue(){
+  const list = document.getElementById('kycQueueList');
+  const { data } = await client
+    .from('kyc_submissions')
+    .select('id, document_type, user_id, profiles(full_name)')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+
+  if(!data || !data.length){ list.innerHTML = `<p class="comment-empty">Nothing pending.</p>`; return; }
+
+  const docLabel = { national_id: 'National ID', passport: 'Passport', birth_certificate: 'Birth certificate' };
+  list.innerHTML = data.map(r => `
+    <div class="admin-request" data-kyc-id="${r.id}">
+      <p class="admin-request-name">${r.profiles?.full_name || 'Gardener'} — ${docLabel[r.document_type] || r.document_type}</p>
+      <div class="admin-request-actions">
+        <button class="btn-approve" data-kyc-approve="true" data-id="${r.id}">Approve</button>
+        <button class="btn-reject" data-kyc-approve="false" data-id="${r.id}">Reject</button>
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('button[data-id]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const approve = btn.dataset.kycApprove === 'true';
+      btn.closest('.admin-request').style.opacity = '0.5';
+      try{
+        await client.rpc('review_kyc_submission', { submission_id: id, approve });
+        await loadKycQueue();
       }catch(e){
         btn.closest('.admin-request').style.opacity = '1';
       }
