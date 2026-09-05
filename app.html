@@ -893,9 +893,13 @@ a{ color:inherit; text-decoration:none; }
           <div class="business-balance-box">
             <p class="stat-list-label">Available business balance</p>
             <p class="stat-figure" id="businessBalanceFigure" style="font-size:22px;">$0.00</p>
-            <button class="pill pill--primary" id="businessWithdrawBtn" style="width:100%; margin-top:8px;">Withdraw business balance</button>
+            <div class="field" style="margin-top:10px;">
+              <label for="businessWithdrawPhone">EcoCash number to receive payout</label>
+              <input type="tel" id="businessWithdrawPhone" placeholder="0771234567">
+            </div>
+            <button class="pill pill--primary" id="businessWithdrawBtn" style="width:100%; margin-top:8px;">Request withdrawal</button>
             <p class="auth-error" id="businessWithdrawError" hidden></p>
-            <p class="verify-note">Records the withdrawal on your ledger. Doesn't yet send a real EcoCash payout — that needs a separate disbursement setup with Paynow.</p>
+            <p class="verify-note">Queues a payout request the owner fulfils and confirms manually — Paynow has no automatic payout API, so this is the real process, not a placeholder.</p>
           </div>
         </div>
 
@@ -931,6 +935,9 @@ a{ color:inherit; text-decoration:none; }
       </div>
 
       <button class="pill pill--primary" id="adminPostNewsBtn" style="width:100%; margin-bottom:24px;">Post news</button>
+
+      <p class="verify-heading">Pending payouts</p>
+      <div id="payoutQueueList" style="margin-bottom:24px;"></div>
 
       <p class="verify-heading">Pending identity verifications</p>
       <div id="kycQueueList" style="margin-bottom:24px;"></div>
@@ -1463,7 +1470,7 @@ function navigateTo(pageName){
   if(pageName === 'statuses') loadInvestmentStatuses();
   if(pageName === 'history') loadTransactionHistory();
   if(pageName === 'allocation') loadPortfolioAllocation();
-  if(pageName === 'admin'){ loadKycQueue(); loadAdminQueue(); }
+  if(pageName === 'admin'){ loadPayoutQueue(); loadKycQueue(); loadAdminQueue(); }
   if(pageName === 'chats') loadChatInbox();
 }
 
@@ -2054,16 +2061,18 @@ function openAmountModal(kind, storeId){
   pendingTxKind = kind;
   pendingStoreId = storeId || null;
   amountReturnPage = storeId ? 'store-detail' : 'performance';
-  amountModalTitle.textContent = kind === 'deposit' ? 'Invest via EcoCash' : kind === 'buy' ? 'Buy shares via EcoCash' : 'Withdraw';
+  amountModalTitle.textContent = kind === 'deposit' ? 'Invest via EcoCash' : kind === 'buy' ? 'Buy shares via EcoCash' : 'Withdraw via EcoCash';
   amountInput.value = '';
   amountError.hidden = true;
   ecocashInstructions.hidden = true;
   ecocashPhone.value = '';
-  // Money coming IN must always go through real EcoCash payment —
-  // no toggle, no way to just type a number and credit yourself.
-  const isMoneyIn = (kind === 'deposit' || kind === 'buy');
+  // Every path (in or out) needs a phone number now — for money in,
+  // it's who's being charged; for withdraw, it's where the payout
+  // request should be sent once you fulfil it manually.
   ecocashToggleRow.hidden = true; // toggle removed entirely — no longer optional
-  ecocashPhoneField.hidden = !isMoneyIn;
+  ecocashPhoneField.hidden = false;
+  document.querySelector('#ecocashPhoneField label').textContent =
+    kind === 'withdraw' ? 'EcoCash number to receive payout' : 'EcoCash number to charge';
   navigateTo('amount');
   amountInput.focus();
 }
@@ -2159,14 +2168,19 @@ document.getElementById('amountConfirmBtn').addEventListener('click', async () =
     return;
   }
 
-  // Withdraw is the one remaining direct-ledger action — it only ever
-  // reduces the balance, so it can't be used to fabricate money. It's
-  // still an internal-only ledger entry for now, not a real EcoCash
-  // payout — that's a separate disbursement flow to build later.
+  // Withdraw requires a real destination number, then it both records
+  // the ledger deduction AND queues a real payout request for the
+  // owner to actually fulfil (send the EcoCash payment) and confirm.
   // Withdrawable CASH is only deposits minus withdrawals — money put
   // into 'buy' transactions has been committed to a business and is no
   // longer freely withdrawable by the investor; it belongs to that
   // business's own balance now (see withdraw_business_funds()).
+  const withdrawPhone = ecocashPhone.value.trim();
+  if(!withdrawPhone){
+    amountError.textContent = 'Enter the EcoCash number to receive your payout.';
+    amountError.hidden = false;
+    return;
+  }
   const withdrawableCash = allTransactions
     .filter(t => t.kind === 'deposit' || t.kind === 'withdraw')
     .reduce((sum, t) => sum + Number(t.delta_amount), 0);
@@ -2176,17 +2190,35 @@ document.getElementById('amountConfirmBtn').addEventListener('click', async () =
     return;
   }
 
-  // Enforce the investment lock-in window: money must have been in for
-  // at least myInvestmentWindowDays since the FIRST money-in transaction.
-  const moneyInTx = allTransactions.filter(t => t.kind === 'deposit' || t.kind === 'buy');
-  if(moneyInTx.length){
-    const firstDate = new Date(moneyInTx[0].created_at);
-    const eligibleDate = new Date(firstDate.getTime() + myInvestmentWindowDays * 86400000);
-    if(new Date() < eligibleDate){
-      amountError.textContent = `Your funds are locked until ${eligibleDate.toLocaleDateString()} (${myInvestmentWindowDays}-day investment window).`;
-      amountError.hidden = false;
-      return;
-    }
+  // Enforce the investment lock-in window PER DEPOSIT — not just from
+  // the first deposit ever. A deposit made yesterday is still locked
+  // even if an older deposit's window already cleared; only the
+  // portion that has each individually sat for the full window counts
+  // toward what's actually withdrawable.
+  const now = new Date();
+  const eligibleDeposits = allTransactions
+    .filter(t => t.kind === 'deposit')
+    .filter(t => now - new Date(t.created_at) >= myInvestmentWindowDays * 86400000)
+    .reduce((sum, t) => sum + Number(t.delta_amount), 0);
+  const alreadyWithdrawn = allTransactions
+    .filter(t => t.kind === 'withdraw')
+    .reduce((sum, t) => sum + Math.abs(Number(t.delta_amount)), 0);
+  const trulyEligible = eligibleDeposits - alreadyWithdrawn;
+
+  if(amt > trulyEligible){
+    // Find the next deposit that will clear its window, to give a real date.
+    const pendingDeposits = allTransactions
+      .filter(t => t.kind === 'deposit')
+      .filter(t => now - new Date(t.created_at) < myInvestmentWindowDays * 86400000)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const nextClear = pendingDeposits.length
+      ? new Date(new Date(pendingDeposits[0].created_at).getTime() + myInvestmentWindowDays * 86400000)
+      : null;
+    amountError.textContent = trulyEligible > 0
+      ? `Only $${trulyEligible.toFixed(2)} has cleared its ${myInvestmentWindowDays}-day lock-in so far. The rest unlocks gradually as each deposit reaches its own window${nextClear ? ` (next: ${nextClear.toLocaleDateString()})` : ''}.`
+      : `Your funds are still within the ${myInvestmentWindowDays}-day investment window${nextClear ? ` — first unlocks ${nextClear.toLocaleDateString()}` : ''}.`;
+    amountError.hidden = false;
+    return;
   }
 
   // Enforce the withdrawal cycle: only one withdrawal allowed per
@@ -2207,6 +2239,12 @@ document.getElementById('amountConfirmBtn').addEventListener('click', async () =
       user_id: currentUserId,
       kind: 'withdraw',
       delta_amount: -amt,
+    });
+    await client.from('payout_requests').insert({
+      user_id: currentUserId,
+      amount: amt,
+      phone: withdrawPhone,
+      request_type: 'investor_withdrawal',
     });
     navigateTo(amountReturnPage);
   }catch(e){
@@ -2321,9 +2359,15 @@ document.getElementById('businessWithdrawBtn').addEventListener('click', async (
   const errEl = document.getElementById('businessWithdrawError');
   errEl.hidden = true;
   const available = parseFloat(document.getElementById('businessWithdrawBtn').dataset.available || '0');
+  const phone = document.getElementById('businessWithdrawPhone').value.trim();
 
   if(available <= 0){
     errEl.textContent = 'No available balance to withdraw yet.';
+    errEl.hidden = false;
+    return;
+  }
+  if(!phone){
+    errEl.textContent = 'Enter the EcoCash number to receive the payout.';
     errEl.hidden = false;
     return;
   }
@@ -2336,8 +2380,10 @@ document.getElementById('businessWithdrawBtn').addEventListener('click', async (
     const { error } = await client.rpc('withdraw_business_funds', {
       p_store_id: ownedStore.id,
       p_amount: available,
+      p_phone: phone,
     });
     if(error) throw error;
+    document.getElementById('businessWithdrawPhone').value = '';
     await loadBusinessBalance(ownedStore.id);
   }catch(e){
     errEl.textContent = e.message || 'Withdrawal failed — try again.';
@@ -2449,6 +2495,40 @@ document.getElementById('adminPostNewsBtn').addEventListener('click', () => {
   openCreateModal();
   document.querySelector('#createTabs [data-create="post"]').click();
 });
+
+async function loadPayoutQueue(){
+  const list = document.getElementById('payoutQueueList');
+  const { data } = await client
+    .from('payout_requests')
+    .select('id, amount, phone, request_type, user_id, profiles(full_name), stores(name)')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+
+  if(!data || !data.length){ list.innerHTML = `<p class="comment-empty">Nothing pending.</p>`; return; }
+
+  const typeLabel = { investor_withdrawal: 'Investor withdrawal', business_withdrawal: 'Business payout' };
+  list.innerHTML = data.map(r => `
+    <div class="admin-request" data-payout-id="${r.id}">
+      <p class="admin-request-name">${r.profiles?.full_name || 'Gardener'} — $${Number(r.amount).toFixed(2)}</p>
+      <p class="comment-empty" style="margin-bottom:8px;">${typeLabel[r.request_type]}${r.stores?.name ? ' — ' + r.stores.name : ''} → ${r.phone}</p>
+      <div class="admin-request-actions">
+        <button class="btn-approve" data-mark-paid="${r.id}">Mark as paid</button>
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('[data-mark-paid]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.closest('.admin-request').style.opacity = '0.5';
+      try{
+        await client.rpc('mark_payout_paid', { p_payout_id: btn.dataset.markPaid });
+        await loadPayoutQueue();
+      }catch(e){
+        btn.closest('.admin-request').style.opacity = '1';
+      }
+    });
+  });
+}
 
 async function loadKycQueue(){
   const list = document.getElementById('kycQueueList');
