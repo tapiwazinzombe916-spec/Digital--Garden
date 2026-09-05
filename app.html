@@ -254,6 +254,17 @@ a{ color:inherit; text-decoration:none; }
 .post-name{ font-size:13px; font-weight:600; }
 .post-time{ font-size:11px; color:var(--ink-soft); }
 .post-body{ font-size:14px; line-height:1.5; color:var(--ink); }
+.post-media{ width:100%; border-radius:var(--radius-sm); margin-top:10px; max-height:360px; object-fit:cover; }
+.post-head{ position:relative; }
+.post-delete{
+  position:absolute; right:0; top:0;
+  width:24px; height:24px; border-radius:50%;
+  background:var(--mist); color:var(--ink-soft);
+  font-size:12px; display:flex; align-items:center; justify-content:center;
+}
+.terms-body{ font-size:13px; line-height:1.6; color:var(--ink-soft); }
+.terms-body p{ margin-bottom:14px; }
+.terms-body strong{ color:var(--ink); }
 
 .post-actions{ display:flex; gap:16px; margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
 .post-action{
@@ -628,6 +639,10 @@ a{ color:inherit; text-decoration:none; }
           <label for="password">Password</label>
           <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required minlength="6">
         </div>
+        <label class="ecocash-toggle" id="termsRow" hidden>
+          <input type="checkbox" id="termsCheckbox">
+          <span>I agree to the <a href="#" id="termsLink" style="color:var(--canopy); text-decoration:underline;">Terms & Conditions</a></span>
+        </label>
         <p class="auth-error" id="authError" hidden></p>
         <button type="submit" class="pill pill--primary" style="width:100%; padding:13px 0;" id="authSubmit">Log in</button>
       </form>
@@ -869,6 +884,42 @@ a{ color:inherit; text-decoration:none; }
       </form>
     </section>
 
+    <!-- ============ TERMS & CONDITIONS ============ -->
+    <section class="page" id="page-terms">
+      <div class="page-header">
+        <button class="page-back" data-back aria-label="Back">←</button>
+        <h1>Terms & Conditions</h1>
+      </div>
+      <div class="terms-body">
+        <p><strong>Digital Garden — Terms of Use (Draft)</strong></p>
+        <p>This is a working draft prepared for early testing. It is not a substitute for review by a qualified lawyer, and should be replaced with a properly reviewed version before public launch or accepting investment at scale.</p>
+
+        <p><strong>1. What Digital Garden is</strong><br>
+        Digital Garden is a community marketplace and investment platform connecting individuals with verified local businesses in Zimbabwe.</p>
+
+        <p><strong>2. Investment risk</strong><br>
+        Investing in any business carries risk, including the possible loss of some or all invested funds. Digital Garden does not guarantee returns, business performance, or repayment.</p>
+
+        <p><strong>3. Verification</strong><br>
+        "Verified" status reflects a review by Digital Garden's admin team based on submitted documentation. It is not a guarantee of a business's financial health, legality, or trustworthiness.</p>
+
+        <p><strong>4. Investment and withdrawal windows</strong><br>
+        Funds are subject to the investment lock-in period and withdrawal cycle selected at signup. Withdrawals are processed manually and may take time to fulfil.</p>
+
+        <p><strong>5. Identity verification</strong><br>
+        Users may be asked to submit identity documents for verification. Documents are stored securely and used solely for verification purposes.</p>
+
+        <p><strong>6. Payments</strong><br>
+        Payments are processed via EcoCash through Paynow. Digital Garden is not a bank and does not hold a banking license.</p>
+
+        <p><strong>7. Changes</strong><br>
+        These terms may be updated as the platform develops. Continued use after changes constitutes acceptance.</p>
+
+        <p><strong>8. Contact</strong><br>
+        Questions about these terms should be directed to the platform's founder.</p>
+      </div>
+    </section>
+
     <!-- ============ PROFILE ============ -->
     <section class="page" id="page-profile">
       <div class="page-header">
@@ -991,6 +1042,10 @@ a{ color:inherit; text-decoration:none; }
           <label for="postBody">Share something with the community</label>
           <input type="text" id="postBody" placeholder="What's on your mind?">
         </div>
+        <div class="field">
+          <label for="postMedia">Photo or video (optional)</label>
+          <input type="file" id="postMedia" accept="image/*,video/*">
+        </div>
       </div>
 
       <!-- Task form -->
@@ -1090,6 +1145,7 @@ const STORAGE_KEY = 'dg_last_feed_v1';
 let currentUserId = null;
 let hasRoutedInitialLanding = false;
 let myInvestmentWindowDays = 30;
+let isCurrentUserOwner = false;
 let myWithdrawalWindowDays = 30;
 const hasKeys = !SUPABASE_URL.includes('YOUR_') && !SUPABASE_ANON_KEY.includes('YOUR_');
 const libraryLoaded = typeof supabase !== 'undefined';
@@ -1230,13 +1286,21 @@ function postHtml(p, prefix){
   prefix = prefix || 'feed';
   const liked = likedPostIds.has(p.id);
   const chatAttr = (p.authorId && p.authorId !== currentUserId) ? `data-start-chat="${p.authorId}" data-chat-name="${p.name}"` : '';
+  const canDelete = p.id && (p.authorId === currentUserId || isCurrentUserOwner);
+  const mediaHtml = p.imageUrl
+    ? (p.mediaType === 'video'
+        ? `<video src="${p.imageUrl}" controls class="post-media"></video>`
+        : `<img src="${p.imageUrl}" class="post-media" alt="">`)
+    : '';
   return `
     <div class="post" data-post-id="${p.id || ''}">
       <div class="post-head" ${chatAttr} style="${chatAttr ? 'cursor:pointer;' : ''}">
         <span class="${ringClass(p.authorStatus)}"><span class="avatar">${initials(p.name)}</span></span>
         <div><p class="post-name">${p.name}</p><p class="post-time">${p.time}</p></div>
+        ${canDelete ? `<button class="post-delete" data-delete-post="${p.id}" aria-label="Delete">✕</button>` : ''}
       </div>
       <p class="post-body">${p.body}</p>
+      ${mediaHtml}
       ${p.id ? `
       <div class="post-actions">
         <button class="post-action ${liked ? 'post-action--active' : ''}" data-like-post="${p.id}">
@@ -1280,7 +1344,7 @@ async function loadFeed(limitOverride){
     const [storesRes, tasksRes, postsRes] = await Promise.all([
       client.from('stores').select('id, name, category, price_label, verification_status').order('created_at', { ascending: false }).limit(n),
       client.from('tasks').select('id, title, location_label, pay_amount, status, claimed_by').order('created_at', { ascending: false }).limit(n),
-      client.from('posts').select('id, body, created_at, author_id, profiles(full_name, verification_status), post_likes(count), post_comments(count)').order('created_at', { ascending: false }).limit(n),
+      client.from('posts').select('id, body, created_at, author_id, image_url, media_type, profiles(full_name, verification_status), post_likes(count), post_comments(count)').order('created_at', { ascending: false }).limit(n),
     ]);
 
     if(currentUserId){
@@ -1293,7 +1357,7 @@ async function loadFeed(limitOverride){
       tasks: (tasksRes.data || []).map(t => ({ id: t.id, title: t.title, loc: t.location_label, pay: `$${t.pay_amount}`, status: t.status, claimed_by: t.claimed_by })),
       posts: (postsRes.data || []).map(p => ({
         id: p.id, name: p.profiles?.full_name || 'Gardener', authorStatus: p.profiles?.verification_status || 'unverified', authorId: p.author_id,
-        time: timeAgo(p.created_at), body: p.body,
+        time: timeAgo(p.created_at), body: p.body, imageUrl: p.image_url, mediaType: p.media_type,
         likeCount: p.post_likes?.[0]?.count || 0, commentCount: p.post_comments?.[0]?.count || 0,
       })),
     };
@@ -1321,7 +1385,7 @@ async function loadNews(){
   try{
     const { data } = await client
       .from('posts')
-      .select('id, body, created_at, author_id, profiles!inner(full_name, verification_status, is_owner), post_likes(count), post_comments(count)')
+      .select('id, body, created_at, author_id, image_url, media_type, profiles!inner(full_name, verification_status, is_owner), post_likes(count), post_comments(count)')
       .eq('profiles.is_owner', true)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -1333,7 +1397,7 @@ async function loadNews(){
 
     const news = (data || []).map(p => ({
       id: p.id, name: p.profiles?.full_name || 'Digital Garden Team', authorStatus: p.profiles?.verification_status || 'verified', authorId: p.author_id,
-      time: timeAgo(p.created_at), body: p.body,
+      time: timeAgo(p.created_at), body: p.body, imageUrl: p.image_url, mediaType: p.media_type,
       likeCount: p.post_likes?.[0]?.count || 0, commentCount: p.post_comments?.[0]?.count || 0,
     }));
     list.innerHTML = news.length
@@ -1351,6 +1415,18 @@ async function loadNews(){
 document.body.addEventListener('click', async (e) => {
   const likeBtn = e.target.closest('[data-like-post]');
   const commentToggle = e.target.closest('[data-toggle-comments]');
+  const deleteBtn = e.target.closest('[data-delete-post]');
+
+  if(deleteBtn){
+    e.stopPropagation(); // don't also trigger the post-head's chat-start click
+    if(!isConfigured || !confirm('Delete this post?')) return;
+    const postId = deleteBtn.dataset.deletePost;
+    const { error } = await client.from('posts').delete().eq('id', postId);
+    if(!error){
+      document.querySelectorAll(`[data-post-id="${postId}"]`).forEach(el => el.remove());
+    }
+    return;
+  }
 
   if(likeBtn){
     if(!isConfigured || !currentUserId) return;
@@ -1415,7 +1491,7 @@ function initCommunityRealtime(){
       const { data: profile } = await client.from('profiles').select('full_name, verification_status').eq('id', payload.new.author_id).single();
       const newPost = {
         id: payload.new.id, name: profile?.full_name || 'Gardener', authorStatus: profile?.verification_status || 'unverified', authorId: payload.new.author_id,
-        time: 'just now', body: payload.new.body, likeCount: 0, commentCount: 0,
+        time: 'just now', body: payload.new.body, imageUrl: payload.new.image_url, mediaType: payload.new.media_type, likeCount: 0, commentCount: 0,
       };
       document.getElementById('postList').insertAdjacentHTML('afterbegin', postHtml(newPost));
     })
@@ -1597,7 +1673,16 @@ document.getElementById('chatSendForm').addEventListener('submit', async (e) => 
 });
 
 document.querySelectorAll('[data-back]').forEach(btn => {
-  btn.addEventListener('click', () => navigateTo('home'));
+  btn.addEventListener('click', () => {
+    // If they're viewing Terms before logging in, go back to the login
+    // screen instead of the app (there's no session to show yet).
+    if(!currentUserId && authScreen.hidden === true && appRoot.hidden === false){
+      appRoot.hidden = true;
+      authScreen.hidden = false;
+      return;
+    }
+    navigateTo('home');
+  });
 });
 document.getElementById('homeSearchShortcut').addEventListener('click', () => {
   navigateTo('market');
@@ -1685,9 +1770,18 @@ document.querySelectorAll('#authScreen .auth-tab').forEach(tab => {
     document.getElementById('accountTypeField').hidden = authMode !== 'signup';
     document.getElementById('windowsField').hidden = authMode !== 'signup';
     document.getElementById('withdrawWindowField').hidden = authMode !== 'signup';
+    document.getElementById('termsRow').hidden = authMode !== 'signup';
     authSubmit.textContent = authMode === 'signup' ? 'Sign up' : 'Log in';
     authError.hidden = true;
   });
+});
+
+document.getElementById('termsLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  document.getElementById('authScreen').hidden = true;
+  document.getElementById('app').hidden = false;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('page--active'));
+  document.getElementById('page-terms').classList.add('page--active');
 });
 
 let selectedAccountType = 'individual';
@@ -1722,6 +1816,12 @@ authForm.addEventListener('submit', async (e) => {
 
   try{
     if(authMode === 'signup'){
+      if(!document.getElementById('termsCheckbox').checked){
+        authError.textContent = 'You must agree to the Terms & Conditions to sign up.';
+        authError.hidden = false;
+        authSubmit.disabled = false;
+        return;
+      }
       const fullName = document.getElementById('fullName').value.trim();
       const investmentWindowDays = document.getElementById('investmentWindow').value;
       const withdrawalWindowDays = document.getElementById('withdrawWindow').value;
@@ -2288,6 +2388,7 @@ async function loadProfile(){
     if(profile?.is_admin) await loadAdminQueue();
     document.getElementById('newUpdateBtn').hidden = !profile?.is_owner;
     document.getElementById('ownerPanelBtn').hidden = !profile?.is_owner;
+    isCurrentUserOwner = !!profile?.is_owner;
 
     // Route people to the page that matches their role, once per login —
     // the owner lands straight on the Admin Panel, business owners land
@@ -2709,8 +2810,25 @@ document.getElementById('createConfirmBtn').addEventListener('click', async () =
     if(activeCreateTab === 'post'){
       const body = document.getElementById('postBody').value.trim();
       if(!body){ errEl.textContent = 'Write something first.'; errEl.hidden = false; return; }
-      await client.from('posts').insert({ author_id: currentUserId, body });
+
+      let imageUrl = null;
+      let mediaType = null;
+      const mediaFile = document.getElementById('postMedia').files[0];
+      if(mediaFile){
+        mediaType = mediaFile.type.startsWith('video') ? 'video' : 'image';
+        const path = `${currentUserId}/${Date.now()}-${mediaFile.name}`;
+        const { error: uploadError } = await client.storage.from('post-images').upload(path, mediaFile);
+        if(uploadError){
+          errEl.textContent = 'Media upload failed — try a smaller file or try again.';
+          errEl.hidden = false;
+          return;
+        }
+        imageUrl = client.storage.from('post-images').getPublicUrl(path).data.publicUrl;
+      }
+
+      await client.from('posts').insert({ author_id: currentUserId, body, image_url: imageUrl, media_type: mediaType });
       document.getElementById('postBody').value = '';
+      document.getElementById('postMedia').value = '';
       await loadFeed();
 
     } else if(activeCreateTab === 'task'){
